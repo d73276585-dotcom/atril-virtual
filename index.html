@@ -1,0 +1,1972 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Atril Profesional de Músicos</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    html, body {
+      touch-action: manipulation;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+    }
+    body { font-family: 'Inter', sans-serif; }
+    .chord-font { 
+      font-family: 'Fira Code', 'Consolas', 'Courier New', Courier, monospace !important;
+      font-variant-ligatures: none;
+      white-space: pre-wrap !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      tab-size: 4;
+      -webkit-text-size-adjust: 100%;
+    }
+    .chord-font font[color], .chord-font span[style*="color"], .chord-font b { display: inline; }
+    .chord-font b { font-weight: 700 !important; }
+    .chord-font .text-yellow-400 {
+      font-weight: 700 !important;
+      color: #facc15 !important;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    [v-cloak] { display: none !important; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fadeIn { animation: fadeIn 0.2s ease-out forwards; }
+    [contenteditable]:empty:before { content: attr(placeholder); color: #64748b; pointer-events: none; display: block; }
+    .sortable-ghost { opacity: 0.4; background-color: #1e293b; border-radius: 1rem; }
+    .sortable-drag { cursor: grabbing !important; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    .drag-handle, .drag-handle-ritmo { touch-action: none; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen flex flex-col overflow-hidden select-text">
+  <div id="app" class="flex-1 flex flex-col h-full max-w-4xl mx-auto w-full p-1 sm:p-4 overflow-hidden" :class="{ 'fixed inset-0 z-50 max-w-none p-0 bg-slate-950': isAppFullscreen || isFullscreen || keepFullscreen }" v-cloak>
+    <!-- PANTALLA DE CARGA INSTANTÁNEA -->
+    <div v-if="isLoading && isLoggedIn" class="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-fadeIn">
+      <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p class="text-blue-400 font-bold text-sm tracking-widest uppercase">Cargando base de datos...</p>
+    </div>
+
+    <!-- PANTALLA DE LOGIN -->
+    <div v-if="!isLoggedIn" class="fixed inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center p-4 animate-fadeIn">
+      <button @click="toggleFullscreen" class="absolute top-4 right-4 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white w-10 h-10 rounded-xl transition shadow flex items-center justify-center text-lg z-50">
+        <i :class="(isFullscreen || keepFullscreen) ? 'fa-solid fa-compress' : 'fa-solid fa-expand'"></i>
+      </button>
+      <div class="bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-sm text-center relative">
+        <div class="w-16 h-16 bg-blue-600 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-blue-900/50">
+          <i class="fa-solid fa-music text-2xl text-white"></i>
+        </div>
+        <h1 class="text-xl font-bold text-white mb-2">Atril Virtual</h1>
+        <p class="text-sm text-slate-400 mb-8">Selecciona tu modo de acceso</p>
+        <div class="space-y-4">
+          <button @click="login('guest')" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition flex items-center justify-center gap-2 border border-slate-700">
+           <i class="fa-solid fa-eye text-emerald-400"></i> Entrar como Invitado
+          </button>
+         
+          <div class="relative pt-4 border-t border-slate-800">
+            <input v-model="adminPassword" @input="loginError = ''" @keyup.enter="login('admin')" type="password" placeholder="Contraseña de Admin" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-blue-500 mb-2 text-center">
+            <button @click="login('admin')" :disabled="isCheckingPass" class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition shadow-lg flex items-center justify-center gap-2">
+              <i v-if="isCheckingPass" class="fa-solid fa-spinner animate-spin text-sm"></i>
+              <span>{{ isCheckingPass ? 'Verificando...' : 'Entrar como Músico / Admin' }}</span>
+            </button>
+          </div>
+          <p v-if="loginError" class="text-rose-400 text-xs mt-2 font-semibold">{{ loginError }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <template v-else>
+      <header v-show="currentView !== 'visor' && currentView !== 'creador'" class="bg-slate-900 border border-slate-800 p-3 rounded-2xl mb-3 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 flex-shrink-0 z-20 sticky top-0">
+        <div class="flex items-center justify-between w-full md:w-auto gap-3">
+          <div class="flex items-center gap-3">
+            <div class="p-2.5 bg-blue-600 rounded-xl shadow-lg cursor-pointer hover:scale-105 transition-transform" @click="resetNavegacion">
+              <i class="fa-solid fa-music text-white text-base"></i>
+            </div>
+            <div>
+              <h1 class="text-sm sm:text-base font-bold bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">Atril Profesional</h1>
+              <p class="text-[9px] sm:text-[10px] text-slate-400">
+                <span v-if="userRole === 'admin'" class="text-blue-400"><i class="fa-solid fa-unlock text-[8px]"></i> Modo Admin</span>
+                <span v-else class="text-emerald-400"><i class="fa-solid fa-eye text-[8px]"></i> Modo Invitado</span>
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 md:hidden">
+            <button @click="recargarDatos" class="bg-sky-600/20 hover:bg-sky-600/40 border border-sky-500/40 text-sky-300 px-2 py-1.5 rounded-xl text-[10px] transition shadow font-bold flex items-center justify-center min-h-[30px]" title="Recargar Datos de la Nube">
+              <i class="fa-solid fa-arrows-rotate" :class="{'animate-spin': syncing}"></i>
+            </button>
+            <button @click="toggleNomenclatura" class="bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/40 text-indigo-300 px-2 py-1.5 rounded-xl text-[10px] transition shadow font-bold flex items-center justify-center min-h-[30px]" title="Cambiar Nomenclatura">
+              <span>{{ useSpanishNomenclatura ? 'DO➔C' : 'C➔DO' }}</span>
+            </button>
+            <button @click="toggleFullscreen" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-2.5 py-1.5 rounded-xl text-xs transition shadow flex items-center justify-center min-h-[30px]" title="Pantalla Completa">
+              <i :class="(isFullscreen || keepFullscreen) ? 'fa-solid fa-compress' : 'fa-solid fa-expand'"></i>
+            </button>
+            <button v-if="userRole === 'admin'" @click="abrirCreador" class="bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/50 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition shadow flex items-center justify-center min-h-[30px]">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+            <button @click="logout" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-2.5 py-1.5 rounded-xl text-xs transition shadow flex items-center justify-center min-h-[30px]" title="Cerrar sesión">
+              <i class="fa-solid fa-sign-out-alt"></i>
+            </button>
+          </div>
+        </div>
+        <div class="relative flex-1 md:max-w-xs w-full">
+          <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+            <i class="fa-solid fa-search text-slate-500 text-xs"></i>
+          </span>
+          <input v-model="searchTerm" type="text" placeholder="Buscar canción, ritmo o género..." class="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 pl-9 pr-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all text-xs" />
+        </div>
+        
+        <div class="hidden md:flex items-center gap-2">
+          <button @click="recargarDatos" class="bg-sky-600/20 hover:bg-sky-600/40 border border-sky-500/40 text-sky-300 px-3 py-1.5 rounded-xl text-xs transition shadow font-bold flex items-center justify-center min-w-[40px]" title="Recargar Datos de la Nube">
+            <i class="fa-solid fa-arrows-rotate" :class="{'animate-spin': syncing}"></i>
+          </button>          
+          <button @click="toggleNomenclatura" class="bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/40 text-indigo-300 px-3 py-1.5 rounded-xl text-xs transition shadow font-bold flex items-center justify-center min-w-[80px]" title="Cambiar Nomenclatura">
+            <span>{{ useSpanishNomenclatura ? 'DO ➔ C' : 'C ➔ DO' }}</span>
+          </button>
+          <button @click="toggleFullscreen" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-1.5 rounded-xl text-xs transition shadow" title="Pantalla Completa">
+            <i :class="(isFullscreen || keepFullscreen) ? 'fa-solid fa-compress' : 'fa-solid fa-expand'"></i>
+          </button>
+          <button v-if="userRole === 'admin'" @click="abrirCreador" class="bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/50 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition shadow flex items-center gap-1">
+            <i class="fa-solid fa-plus"></i> <span>Añadir</span>
+          </button>
+          <button @click="logout" class="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-1.5 rounded-xl text-xs transition shadow" title="Cerrar sesión">
+            <i class="fa-solid fa-sign-out-alt"></i>
+          </button>
+        </div>
+      </header>
+      <div v-if="syncing" class="bg-blue-900/40 border border-blue-500/30 px-3 py-1.5 rounded-lg mb-2 flex items-center justify-between text-[11px] text-blue-200 shrink-0 z-50 transition-opacity absolute top-4 left-1/2 transform -translate-x-1/2">
+        <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> Sincronizando en la nube...</span>
+      </div>
+      <div class="flex-1 overflow-hidden relative flex flex-col">
+        <!-- VISOR DE CANCIÓN -->
+        <div v-if="currentView === 'visor'" class="h-full flex flex-col bg-slate-950 relative animate-fadeIn flex-1 w-full max-w-4xl mx-auto rounded-2xl overflow-hidden border border-slate-800/50 shadow-2xl">
+          <div class="flex items-center justify-between bg-slate-900/90 backdrop-blur border-b border-slate-800 p-1.5 sm:p-2.5 flex-shrink-0 z-10 sticky top-0 w-full">
+            <button @click="retroceder" class="bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-200 transition text-xs font-semibold flex items-center justify-center min-w-[32px] min-h-[32px] sm:min-w-[34px] sm:min-h-[34px] shadow">
+              <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+              <button @click="resetAutoZoom" class="bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600/40 px-2 sm:px-2.5 py-1 min-h-[32px] sm:min-h-[34px] rounded-xl text-[13px] sm:text-[15px] font-bold transition shadow">
+                AUTO
+              </button>
+              
+              <button @click="toggleChords" class="bg-amber-600/20 hover:bg-amber-600/40 border border-amber-500/40 text-amber-300 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1 min-h-[32px] sm:min-h-[34px] rounded-xl transition font-bold whitespace-nowrap shadow">
+                {{ showChords ? 'Ocultar' : 'Mostrar' }} Acordes
+              </button>
+              <button @click="abrirModalTonosCantante" class="bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/40 text-indigo-300 flex items-center justify-center min-w-[32px] min-h-[32px] sm:min-w-[34px] sm:min-h-[34px] rounded-xl text-xs transition shadow">
+                <i class="fa-solid fa-microphone"></i>
+              </button>
+             
+              <button v-if="userRole === 'admin'" @click="abrirEditarCancionActual" class="bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center min-w-[32px] min-h-[32px] sm:min-w-[34px] sm:min-h-[34px] rounded-xl text-xs transition shadow">
+                <i class="fa-solid fa-pen-to-square"></i>
+              </button>
+              <button @click="toggleFullscreen" class="bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center min-w-[32px] min-h-[32px] sm:min-w-[34px] sm:min-h-[34px] rounded-xl text-xs transition shadow">
+                <i :class="(isFullscreen || isAppFullscreen || keepFullscreen) ? 'fa-solid fa-compress' : 'fa-solid fa-expand'"></i>
+              </button>
+            </div>
+          </div>
+          <div class="bg-slate-900/80 border-b border-slate-800/80 px-1.5 py-1 flex flex-col gap-0.5 flex-shrink-0 z-10 w-full">
+            <div class="flex items-center justify-between px-1 pb-0 w-full gap-2">
+              <span class="bg-blue-950 text-blue-400 text-[10px] sm:text-xs font-mono font-bold px-1.5 py-0.5 rounded border border-blue-800 flex-shrink-0 mt-0.5">#{{ getValidSongId(activeSong) }}</span>
+              <h2 class="text-2xl sm:text-4xl font-extrabold text-white uppercase leading-tight tracking-wide break-words text-left flex-1">{{ activeSong.titulo }}</h2>
+            </div>
+            <div class="flex flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar w-full px-0.5">
+              <div class="flex items-center bg-slate-950 px-1.5 py-1 rounded-xl border border-blue-900/50 shadow-inner flex-shrink-0">
+                 <span class="text-xs sm:text-xs text-slate-300 font-bold px-1 whitespace-nowrap flex items-center gap-1">
+                  <span>Tono:</span> 
+                  <strong class="text-white text-base sm:text-lg font-black bg-blue-600/30 border border-blue-500/50 px-1.5 py-0.5 rounded-md shadow-sm">
+                    {{ translateChord(currentSongKey) }}<span v-if="activeSong.modalidad === 'MENOR'" class="text-white font-bold text-xs sm:text-sm ml-0.5">m</span>
+                  </strong>
+                </span>
+                <div class="flex items-center gap-1 ml-1.5">
+                  <button @click="resetTono" class="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded-lg text-[9px] font-bold text-slate-300 flex items-center justify-center shadow" title="Restaurar Tono Original"><i class="fa-solid fa-rotate-left"></i></button>
+                  <button @click="transponer(-1)" class="w-7 h-7 bg-slate-800 hover:bg-blue-600 rounded-lg text-sm font-bold text-white shadow flex items-center justify-center">-</button>
+                  <button @click="transponer(1)" class="w-7 h-7 bg-slate-800 hover:bg-blue-600 rounded-lg text-sm font-bold text-white shadow flex items-center justify-center">+</button>
+                </div>
+              </div>
+              
+               <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 shadow-inner flex-shrink-0">
+                <button @click="ajustarZoom(-0.1)" class="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded-lg font-bold text-xs text-white shadow flex items-center justify-center">A-</button>
+                <span class="font-mono text-[11px] text-blue-400 w-8 text-center">{{ typeof effectiveFontSize === 'number' ? effectiveFontSize.toFixed(1) : effectiveFontSize }}</span>
+                <button @click="ajustarZoom(0.1)" class="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded-lg font-bold text-xs text-white shadow flex items-center justify-center">A+</button>
+             </div>
+            </div>
+          </div>
+          <div ref="visorScroll" class="flex-1 overflow-y-auto overflow-x-hidden px-1.5 sm:px-8 pt-1 pb-5 sm:pt-3 sm:pb-5 bg-slate-950 select-text w-full max-w-full" style="touch-action: pan-y;">
+            <pre class="chord-font text-white font-medium m-0" :style="{ fontSize: effectiveFontSize + 'px', lineHeight: computedLineHeight }" v-html="renderedChordChart"></pre>
+          </div>
+          <div v-if="currentContextList.length > 1" class="bg-slate-900 border-t border-slate-800 p-2 flex justify-between items-center z-20 w-full flex-shrink-0 shadow-lg gap-2">
+            <button @click="navegarCancionContexto(-1)" :disabled="!prevSongData" class="flex-1 px-3 py-1.5 sm:py-2 rounded-xl transition flex items-center gap-2 text-xs overflow-hidden border border-transparent" :class="prevSongData ? 'bg-slate-800 text-white hover:bg-slate-700 hover:border-slate-600 cursor-pointer' : 'opacity-40 cursor-not-allowed bg-slate-900 text-slate-600'">
+              <i class="fa-solid fa-chevron-left text-slate-400 text-xs shrink-0"></i>
+              <div class="flex flex-col min-w-0 text-left flex-1">
+                <div class="font-bold text-emerald-400 truncate text-xs sm:text-sm leading-tight">
+                  {{ prevSongData ? prevSongData.titulo : 'Inicio' }}
+                </div>
+                <div v-if="prevSongData" class="text-[10px] text-emerald-300 font-mono font-bold mt-0.5">
+                  {{ getSongKeyForContext(prevSongData.id) }}
+                </div>
+              </div>
+            </button>
+            
+            <button @click="navegarCancionContexto(1)" :disabled="!nextSongData" class="flex-1 px-3 py-1.5 sm:py-2 rounded-xl transition flex items-center justify-between text-xs overflow-hidden border border-transparent" :class="nextSongData ? 'bg-blue-900/30 border-blue-500/30 text-white hover:bg-blue-800/40 cursor-pointer' : 'opacity-40 cursor-not-allowed bg-slate-900 text-slate-600'">
+              <div class="flex flex-col min-w-0 text-right flex-1">
+                <div class="font-bold text-blue-100 truncate text-xs sm:text-sm leading-tight">
+                  {{ nextSongData ? nextSongData.titulo : 'Fin' }}
+                </div>
+               <div v-if="nextSongData" class="text-[10px] text-blue-300 font-mono font-bold mt-0.5">
+                  {{ getSongKeyForContext(nextSongData.id) }}
+                </div>
+              </div>
+              <i class="fa-solid fa-chevron-right text-blue-300 text-xs shrink-0 ml-2"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- CREADOR / EDITOR DE CANCIÓN -->
+        <div v-else-if="currentView === 'creador' && editForm" class="h-full flex flex-col bg-slate-950 relative animate-fadeIn flex-1 w-full max-w-4xl mx-auto rounded-2xl overflow-hidden border border-slate-800/50 shadow-2xl">
+          <div class="flex items-center justify-between flex-shrink-0 bg-slate-900 border-b border-slate-800 p-3 z-30 sticky top-0 w-full shadow-md">
+            <button @click="retroceder" class="text-xs text-slate-400 hover:text-white transition flex items-center gap-1.5 relative z-20"><i class="fa-solid fa-arrow-left"></i> Cancelar</button>
+            <div class="flex gap-2 relative z-20">
+              <button v-if="editingSongId" @click="eliminarCancion" class="bg-rose-900/30 hover:bg-rose-900 text-rose-300 text-xs px-3 py-1.5 rounded-xl transition">Eliminar</button>
+              <button @click="guardarCancion" :disabled="syncing" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-1.5 rounded-xl transition shadow flex items-center gap-1.5 disabled:opacity-50">
+                <i v-if="syncing" class="fa-solid fa-spinner animate-spin"></i>
+                <i v-else class="fa-solid fa-floppy-disk"></i>
+                <span>{{ syncing ? 'Guardando...' : 'Guardar' }}</span>
+              </button>
+            </div>
+          </div>
+          <div class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 pb-20 relative z-0">
+            <div class="bg-slate-900 p-2 sm:p-3 rounded-2xl flex flex-row items-center justify-between gap-3 border border-slate-800 shadow-lg sticky top-0 z-40 overflow-x-auto no-scrollbar">
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  <button @mousedown.prevent="undo" :disabled="undoStack.length === 0" :class="undoStack.length > 0 ? 'text-slate-200 hover:bg-slate-800' : 'text-slate-600 cursor-not-allowed'" class="p-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Deshacer (Ctrl+Z)">
+                    <i class="fa-solid fa-rotate-left"></i>
+                  </button>
+                  <div class="w-px h-4 bg-slate-800"></div>
+                  <button @mousedown.prevent="redo" :disabled="redoStack.length === 0" :class="redoStack.length > 0 ? 'text-slate-200 hover:bg-slate-800' : 'text-slate-600 cursor-not-allowed'" class="p-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Rehacer (Ctrl+Y)">
+                    <i class="fa-solid fa-rotate-right"></i>
+                  </button>
+                </div>
+                <button @mousedown.prevent="aplicarNegrita" 
+                        class="px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer select-none" 
+                        :class="isBoldActive ? 'bg-blue-600 border-blue-500 text-white shadow-inner shadow-black/30' : 'bg-slate-800 hover:bg-slate-700 text-white border-slate-700'"
+                        title="Aplicar Negrita">
+                  <i class="fa-solid fa-bold" :class="isBoldActive ? 'text-white' : 'text-blue-400'"></i> <span class="hidden sm:inline ml-1.5">Negrita</span>
+                </button>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                <span class="text-[11px] font-bold text-slate-400 mr-1 hidden sm:flex items-center gap-1">
+                  <i class="fa-solid fa-palette text-blue-400"></i>
+                </span>
+                <button 
+                  v-for="color in allColors" 
+                  :key="color" 
+                  @mousedown.prevent="applyColor(color)"
+                  class="w-6 h-6 rounded-full border-2 transition-all duration-200 focus:outline-none flex items-center justify-center shadow-md cursor-pointer select-none"
+                  :style="{ backgroundColor: color, borderColor: selectedColor === color ? '#ffffff' : 'transparent' }">
+                  <i v-if="selectedColor === color" class="fa-solid fa-check text-[10px] text-white"></i>
+                </button>
+              </div>
+            </div>
+            <div class="bg-slate-900 p-4 rounded-2xl space-y-3 border border-slate-800 shadow-lg relative transition-all z-20">
+               <div>
+                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Título de la Canción</label>
+                <input v-model="editForm.titulo" @input="editForm.titulo = (editForm.titulo || '').toUpperCase()" type="text" placeholder="TÍTULO DE LA CANCIÓN" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 uppercase w-full focus:outline-none focus:border-blue-500 h-[38px] shadow-inner font-bold">
+              </div>
+               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div class="relative w-full">
+                  <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Tono</label>
+                  <input list="tonos-list" v-model="editForm.tonoOriginal" @input="editForm.tonoOriginal = (editForm.tonoOriginal || '').toUpperCase()" type="text" placeholder="Ej: C" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-blue-400 font-bold uppercase w-full focus:outline-none focus:border-blue-500 h-[38px] transition shadow-inner">
+                  <datalist id="tonos-list">
+                    <option v-for="t in ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']" :key="t" :value="t">{{ translateChord(t) }}</option>
+                  </datalist>
+                </div>
+                <div class="relative w-full">
+                  <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Modalidad</label>
+                  <input list="mod-list" v-model="editForm.modalidad" @input="editForm.modalidad = (editForm.modalidad || '').toUpperCase()" type="text" placeholder="Ej: MAYOR" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-indigo-300 font-bold uppercase w-full focus:outline-none focus:border-blue-500 h-[38px] transition shadow-inner">
+                  <datalist id="mod-list">
+                    <option value="MAYOR">MAYOR</option>
+                    <option value="MENOR">MENOR</option>
+                  </datalist>
+                </div>
+                <div class="relative w-full">
+                  <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Género</label>
+                  <input list="generos-list" v-model="editForm.genero" @input="editForm.genero = (editForm.genero || '').toUpperCase()" type="text" placeholder="GÉNERO" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 font-bold uppercase w-full focus:outline-none focus:border-blue-500 h-[38px] transition shadow-inner">
+                  <datalist id="generos-list">
+                    <option v-for="g in listaGeneros" :key="g" :value="g"></option>
+                  </datalist>
+                </div>
+                 <div class="relative w-full">
+                  <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Ritmo</label>
+                  <input list="ritmos-list" v-model="editForm.ritmo" @input="editForm.ritmo = (editForm.ritmo || '').toUpperCase()" type="text" placeholder="RITMO" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 font-bold uppercase w-full focus:outline-none focus:border-blue-500 h-[38px] transition shadow-inner">
+                  <datalist id="ritmos-list">
+                    <option v-for="r in allRitmos" :key="r" :value="r"></option>
+                  </datalist>
+                </div>
+              </div>
+            </div>
+            
+             <div class="w-full flex flex-col min-h-[400px] relative z-0">
+              <div 
+                ref="editorTextarea" 
+                contenteditable="true"
+                @input="onContentEditableInput"
+                @keydown="handleKeydown"
+                @paste="handlePaste"
+                @keyup="updateEditorFormattingState(true)"
+                @mouseup="updateEditorFormattingState(true)"
+                @click="updateEditorFormattingState(true)"
+                @focus="updateEditorFormattingState(true)"
+                placeholder="Escribe la letra y acordes libres (ej. C, G, Am, DO, SOL)..."
+                class="flex-1 w-full min-h-[400px] h-[55vh] bg-slate-900 border border-slate-800 rounded-2xl p-4 chord-font text-xs text-slate-200 overflow-y-auto focus:outline-none focus:border-blue-500 transition-colors shadow-inner select-text whitespace-pre-wrap outline-none relative z-0">
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- BÚSQUEDA -->
+        <div v-else-if="searchTerm" class="h-full flex flex-col space-y-3 animate-fadeIn">
+           <div class="flex items-center justify-between flex-shrink-0">
+            <h2 class="text-xs font-semibold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>Resultados de búsqueda</span>
+              <span class="bg-slate-900 text-[10px] text-slate-400 px-2 py-0.5 rounded-full">{{ filteredSongs.length }}</span>
+             </h2>
+            <button @click="searchTerm = ''" class="text-xs text-slate-500 hover:text-white underline">Limpiar</button>
+          </div>
+          <div v-sortable="{ handle: '.drag-handle', animation: 150, onEnd: (e) => onReorderEnd(e, 'busqueda') }" class="flex-1 overflow-y-auto space-y-2 pr-2 pb-10">
+            <div v-for="(song, index) in filteredSongs" :key="song.id" class="p-3 bg-slate-900 hover:bg-slate-800 border border-slate-800/80 rounded-2xl transition flex justify-between items-center group shadow-lg cursor-pointer" @click="playFromSearch(index)">
+               <div class="flex items-center">
+                <i v-if="userRole === 'admin'" class="fa-solid fa-grip-lines text-slate-600 hover:text-slate-400 mr-3 cursor-grab drag-handle active:cursor-grabbing text-lg px-2" @click.stop></i>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="bg-blue-950 border border-blue-800 text-blue-400 px-2 py-0.5 rounded text-[10px] font-mono font-bold">#{{ song.id }}</span>
+                  <span class="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded text-[10px] font-mono font-bold" v-html="getDisplayKeyAndModality(song.id)"></span>
+                  <h3 class="text-sm font-bold group-hover:text-blue-400 transition uppercase">{{ song.titulo }}</h3>
+                </div>
+                <div class="text-[10px] text-slate-500 mt-1 uppercase">{{ song.genero }} • {{ song.ritmo }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- EXPLORAR GÉNEROS Y REPERTORIOS -->
+        <div v-else-if="currentView === 'generos'" class="h-full flex flex-col space-y-4 overflow-y-auto pb-10 pr-2 animate-fadeIn">
+          <div class="space-y-2 flex-shrink-0">
+             <h2 class="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+              <i class="fa-solid fa-microphone-lines"></i> Modo Ensayo
+            </h2>
+            <div class="bg-slate-900 border border-slate-800 p-3 rounded-2xl flex items-center justify-between shadow-lg gap-2">
+              <div class="text-xs text-slate-300 hidden sm:block">Ajustar tonos en géneros a:</div>
+              <button @click="openSingerSelect('global', null, globalActiveSinger)" class="flex-1 sm:flex-none bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-indigo-300 font-bold focus:outline-none flex justify-between items-center w-full sm:w-auto shadow-inner hover:bg-slate-900 transition relative z-20">
+                <span class="truncate">{{ globalActiveSinger || '-- Tono Original --' }}</span>
+                <i class="fa-solid fa-chevron-down ml-2 text-slate-500"></i>
+              </button>
+            </div>
+          </div>
+          <div class="space-y-2 flex-shrink-0">
+            <h2 class="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+               <i class="fa-solid fa-list-check text-emerald-500 animate-pulse"></i> Repertorios Generales
+            </h2>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <button v-for="(rep, key) in repertorios" :key="key" @click="abrirRepertorio(key)" class="p-2.5 sm:p-3 bg-slate-900 hover:bg-slate-800 border border-emerald-900/40 hover:border-emerald-500 rounded-2xl transition flex flex-col text-left shadow-lg relative group overflow-hidden">
+                <div class="absolute right-2 top-2 text-[9px] font-bold bg-emerald-950 border border-emerald-800 text-emerald-400 px-1.5 py-0.5 rounded-md">
+                  {{ rep.canciones ? rep.canciones.length : 0 }} temas
+                </div>
+                <span class="text-[10px] text-emerald-400 font-bold tracking-widest block mb-1 uppercase">{{ key }}</span>
+                <span class="text-xs font-bold text-slate-100 truncate group-hover:text-emerald-300 transition">{{ rep.nombre }}</span>
+                <span v-if="rep.cantante" class="text-[9px] text-indigo-400 font-semibold truncate mt-1"><i class="fa-solid fa-microphone mr-1"></i> {{ rep.cantante }}</span>
+               </button>
+            </div>
+          </div>
+          <div class="space-y-2 flex-shrink-0">
+            <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <i class="fa-solid fa-guitar text-blue-500"></i> Explorar por Género
+            </h2>
+             <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pb-6">
+              <button v-for="gen in listaGeneros" :key="gen" @click="selectGenero(gen)" class="px-3 h-14 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-blue-500/60 rounded-2xl transition duration-150 flex items-center justify-between group shadow-lg">
+                <div class="flex items-center gap-2.5 truncate">
+                  <div class="text-left truncate">
+                     <span class="text-xs font-bold text-slate-200 group-hover:text-blue-400 transition block truncate">{{ gen }}</span>
+                    <span class="text-[10px] text-slate-500">{{ contarCancionesPorGenero(gen) }} canciones</span>
+                  </div>
+                </div>
+                <i class="fa-solid fa-chevron-right text-slate-600 group-hover:text-blue-400 transition-transform group-hover:translate-x-1"></i>
+               </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- LISTA DE RITMOS -->
+        <div v-else-if="currentView === 'ritmos_genero'" class="h-full flex flex-col space-y-3 animate-fadeIn">
+          <div class="flex items-center gap-2 text-xs text-slate-400 flex-shrink-0">
+            <button @click="retroceder" class="hover:text-white underline"><i class="fa-solid fa-arrow-left mr-1"></i> Géneros</button>
+            <span>/</span>
+            <span class="text-blue-400 font-bold uppercase">{{ activeGenero }}</span>
+          </div>
+          <div v-sortable="{ handle: '.drag-handle-ritmo', animation: 150, onEnd: (e) => onReorderEnd(e, 'ritmos') }" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto pb-10 pr-2">
+            <button v-for="ritmo in listaRitmosDelGenero" :key="ritmo" @click="selectRitmo(ritmo)" class="px-3 h-14 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-blue-500/60 rounded-2xl transition flex items-center justify-between group shadow-lg">
+              <div class="flex items-center gap-2.5 truncate">
+                <i v-if="userRole === 'admin'" class="fa-solid fa-grip-lines text-slate-600 hover:text-slate-400 mr-2 cursor-grab drag-handle-ritmo active:cursor-grabbing px-1" @click.stop></i>
+                <div class="text-left truncate">
+                  <span class="text-xs font-bold text-slate-200 group-hover:text-blue-400 transition block truncate">{{ ritmo }}</span>
+                   <span class="text-[10px] text-slate-500">{{ contarCancionesPorRitmo(ritmo) }} canciones</span>
+                </div>
+              </div>
+             <i class="fa-solid fa-chevron-right text-slate-600"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- LISTA DE CANCIONES POR RITMO -->
+         <div v-else-if="currentView === 'lista_genero'" class="h-full flex flex-col space-y-3 animate-fadeIn">
+          <div class="flex items-center gap-2 text-xs text-slate-400 flex-shrink-0">
+            <button @click="retroceder" class="hover:text-white underline"><i class="fa-solid fa-arrow-left mr-1"></i> Atrás</button>
+            <span>/</span><span class="text-blue-400 font-bold uppercase">{{ activeRitmo }}</span>
+          </div>
+          <div v-sortable="{ handle: '.drag-handle', animation: 150, onEnd: (e) => onReorderEnd(e, 'lista_genero') }" class="flex-1 overflow-y-auto space-y-2 pr-2 pb-10">
+            <div v-for="(song, index) in songsByActiveGeneroAndRitmo" :key="song.id" class="p-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-2xl transition flex justify-between items-center group shadow-lg cursor-pointer" @click="playFromGenre(index)">
+              <div class="flex items-center">
+                <i v-if="userRole === 'admin'" class="fa-solid fa-grip-lines text-slate-600 hover:text-slate-400 mr-3 cursor-grab drag-handle active:cursor-grabbing text-lg px-2" @click.stop></i>
+               </div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="bg-blue-950 text-blue-400 px-2 py-0.5 rounded text-[10px] font-mono font-bold border border-blue-800">#{{ song.id }}</span>
+                  <span class="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded text-[10px] font-mono font-bold" v-html="getDisplayKeyAndModality(song.id)"></span>
+                   <h3 class="text-sm font-bold group-hover:text-blue-400 transition uppercase">{{ song.titulo }}</h3>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DETALLE DE REPERTORIO -->
+        <div v-else-if="currentView === 'repertorio_detalle'" class="h-full flex flex-col space-y-2 animate-fadeIn">
+          <div class="flex items-center justify-between flex-shrink-0">
+            <div class="flex items-center gap-2 text-xs text-slate-400">
+              <button @click="retroceder" class="hover:text-white underline"><i class="fa-solid fa-arrow-left mr-1"></i> Inicio</button>
+            </div>
+            <button v-if="repertorios[activeRepertorio] && repertorios[activeRepertorio].canciones && repertorios[activeRepertorio].canciones.length > 0" @click="iniciarPresentacionSetlist" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-lg flex items-center gap-1.5 transition">
+              <i class="fa-solid fa-play"></i><span>Iniciar Setlist</span>
+            </button>
+          </div>
+          <div v-if="repertorios[activeRepertorio]" class="bg-slate-900 border border-slate-800 p-2.5 sm:p-3 rounded-2xl flex flex-col gap-2 flex-shrink-0 shadow-lg">
+            <div class="flex items-center justify-between">
+              <input v-if="userRole === 'admin'" v-model="repertorios[activeRepertorio].nombre" @change="guardarRepertoriosEnNube" type="text" class="bg-transparent border-b border-dashed border-slate-700 focus:border-emerald-500 focus:outline-none text-xs sm:text-sm font-bold text-white px-1 uppercase w-full relative z-10" />
+              <span v-else class="text-xs sm:text-sm font-bold text-white px-1 uppercase">{{ repertorios[activeRepertorio].nombre }}</span>
+            </div>
+            <div class="flex items-center justify-between gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800 relative z-20">
+              <div class="flex items-center gap-2 w-full">
+                 <span class="text-[10px] font-bold text-indigo-400 uppercase whitespace-nowrap"><i class="fa-solid fa-microphone mr-1"></i> Cantante:</span>
+                
+                <button v-if="userRole === 'admin'" @click.stop="openSingerSelect('repertorio_general', null, repertorios[activeRepertorio].cantante)" class="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 flex justify-between items-center flex-1 max-w-[200px] hover:bg-slate-800 transition shadow">
+                  <span class="truncate">{{ repertorios[activeRepertorio].cantante || '(Original)' }}</span>
+                  <i class="fa-solid fa-chevron-down ml-1 text-slate-500"></i>
+                </button>
+                <span v-else class="text-xs text-white font-bold">{{ repertorios[activeRepertorio].cantante || 'Ninguno' }}</span>
+              </div>
+            </div>
+            <div v-if="userRole === 'admin'" class="relative z-10">
+              <input v-model="repSearchTerm" type="text" placeholder="Añadir por ID o Título..." class="w-full bg-slate-950 border border-slate-800 rounded-xl py-1.5 pl-3 pr-8 text-xs text-slate-200 focus:outline-none focus:border-emerald-500" />
+              <div v-if="repSearchTerm" class="absolute z-[60] left-0 right-0 mt-1 bg-slate-950 border border-slate-800 rounded-xl max-h-48 overflow-y-auto shadow-2xl">
+                <div v-for="s in filteredAvailableForRep" :key="s.id" @click="agregarCancionARepertorio(s.id)" class="p-2 hover:bg-slate-900 border-b border-slate-900/50 cursor-pointer flex justify-between items-center text-xs transition">
+                  <span><span class="text-emerald-400 font-mono mr-1">#{{ s.id }}</span>{{ s.titulo }}</span>
+                  <span class="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">+ Añadir</span>
+                 </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="repertorios[activeRepertorio] && (!repertorios[activeRepertorio].canciones || repertorios[activeRepertorio].canciones.length === 0)" class="flex-1 flex items-center justify-center text-slate-500 text-xs flex-col gap-2 relative z-0">
+            <i class="fa-solid fa-folder-open text-3xl opacity-20"></i>
+            <span>No hay canciones en este repertorio.</span>
+          </div>
+          <div v-else-if="repertorios[activeRepertorio]" v-sortable="{ handle: '.drag-handle', animation: 150, onEnd: (e) => onReorderEnd(e, 'repertorio_detalle') }" class="flex-1 overflow-y-auto space-y-1.5 pr-1 pb-10 relative z-0">
+            <div v-for="(songId, idx) in repertorios[activeRepertorio].canciones" :key="songId + '_' + idx" class="p-2 sm:p-2.5 bg-slate-900 border border-slate-800/80 rounded-xl flex items-center justify-between group shadow gap-2">
+              <div class="flex items-center gap-2 cursor-pointer flex-1 min-w-0" @click="playFromRepertory(idx)">
+                <i v-if="userRole === 'admin'" class="fa-solid fa-grip-lines text-slate-600 hover:text-slate-400 cursor-grab drag-handle active:cursor-grabbing text-base px-1" @click.stop></i>
+                <span class="text-[11px] font-mono font-bold text-slate-500 w-4">{{ idx + 1 }}.</span>
+                 <span class="bg-blue-950 text-blue-400 font-mono text-[9px] px-1.5 py-0.5 rounded border border-blue-800/60">#{{ songId }}</span>
+                <div class="truncate">
+                  <h4 class="text-xs sm:text-sm font-bold text-white group-hover:text-emerald-400 transition truncate">{{ getSongTitle(songId) }}</h4>
+                  <div class="text-[9px] text-slate-400 flex items-center gap-1 flex-wrap">
+                     <span>Orig: <strong class="text-blue-400">{{ getSongKeyAndModality(songId) }}</strong></span>
+                    <span v-if="getSingerKeyDisplay(songId, true)" class="flex items-center gap-0.5">
+                      <i class="fa-solid fa-arrow-right text-[7px] text-slate-600"></i>
+                      <i class="fa-solid fa-microphone text-[8px] text-indigo-400"></i>
+                       <strong class="text-indigo-400">{{ getSingerKeyDisplay(songId, true) }}</strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+               <div class="flex items-center gap-1 flex-shrink-0">
+                <div class="flex items-center gap-1 bg-slate-950 px-1.5 py-0.5 rounded-lg border border-slate-800">
+                  <i class="fa-solid fa-user text-[8px] text-indigo-400"></i>
+                  <button v-if="userRole === 'admin'" @click.stop="openSingerSelect('repertorio_cancion', songId, getSongSinger(songId, true))" class="bg-transparent text-[10px] font-bold text-slate-300 focus:outline-none w-16 sm:w-20 flex justify-between items-center text-left hover:bg-slate-800 px-1 py-0.5 rounded">
+                    <span class="truncate">{{ getSongSinger(songId, true) || 'Gen' }}</span>
+                    <i class="fa-solid fa-chevron-down ml-1 text-slate-500 opacity-50 text-[8px]"></i>
+                  </button>
+                  <span v-else class="text-[10px] font-bold text-slate-300 w-16 sm:w-20 truncate">{{ getSongSinger(songId, true) || 'Gen' }}</span>
+                </div>
+                <button v-if="userRole === 'admin'" @click.stop="removerCancionDeRepertorio(songId)" class="p-1 bg-rose-900/30 hover:bg-rose-900 text-rose-300 rounded-lg text-xs transition"><i class="fa-solid fa-trash text-[10px]"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+    
+    <!-- MODAL SELECCIÓN CANTANTE REPERTORIO -->
+    <div v-if="singerSelectModal.isOpen" class="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 animate-fadeIn" @click="singerSelectModal.isOpen = false">
+      <div class="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[85vh] shadow-2xl absolute bottom-0 sm:relative transition-all duration-300" @click.stop>
+        <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900 sticky top-0 z-10">
+          <h3 class="text-indigo-400 font-bold text-sm">Seleccionar Cantante</h3>
+          <button @click="singerSelectModal.isOpen = false" class="text-slate-400 hover:text-white bg-slate-800 p-1.5 rounded-lg"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="overflow-y-auto p-2 space-y-1 bg-slate-950 pb-8 sm:pb-2">
+          <button @click="selectSingerOption('')" class="w-full text-left px-4 py-3 rounded-xl text-xs font-bold transition flex items-center justify-between" :class="singerSelectModal.currentValue === '' ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30' : 'text-slate-300 hover:bg-slate-800 border border-transparent'">
+            <span>-- {{ singerSelectModal.type === 'global' ? 'Tono Original / Guardado' : 'Tono General' }} --</span>
+            <i v-if="singerSelectModal.currentValue === ''" class="fa-solid fa-check"></i>
+          </button>
+          <button v-for="c in cantantesDisponibles" :key="c" @click="selectSingerOption(c)" class="w-full text-left px-4 py-3 rounded-xl text-xs font-bold transition flex items-center justify-between" :class="singerSelectModal.currentValue === c ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800 border border-transparent'">
+            <span>{{ c }}</span>
+            <i v-if="singerSelectModal.currentValue === c" class="fa-solid fa-check"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL GESTIÓN DE TONOS POR CANTANTE -->
+    <div v-if="showSingerModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 animate-fadeIn" @click.self="showSingerModal = false">
+       <div class="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl w-full max-w-md p-5 pb-8 sm:pb-5 text-sm shadow-2xl absolute bottom-0 sm:relative transition-all duration-300">
+        <div class="flex justify-between border-b border-slate-800 pb-2 mb-3">
+          <h3 class="font-bold text-white"><i class="fa-solid fa-microphone text-indigo-400"></i> Tonos por Cantante</h3>
+          <button @click="showSingerModal = false" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <div v-if="userRole === 'admin'" class="flex gap-2 mb-4 bg-slate-950 p-2 rounded-xl border border-slate-800 relative z-20">
+          <input v-model="nuevoCantanteNombre" @input="nuevoCantanteNombre = (nuevoCantanteNombre || '').toUpperCase()" list="singers-modal-list" type="text" placeholder="Nombre Cantante" class="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 w-1/2 text-xs text-white uppercase outline-none focus:border-indigo-500">
+          
+          <datalist id="singers-modal-list">
+            <option v-for="c in cantantesDisponibles" :key="c" :value="c">{{ c }}</option>
+          </datalist>
+          <div class="relative w-1/4">
+            <select v-model="nuevoCantanteTono" class="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 h-full w-full text-xs text-white outline-none focus:border-indigo-500 appearance-none cursor-pointer">
+              <option v-for="t in ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']" :key="t" :value="t">{{ translateChord(t) }}{{ activeSong.modalidad === 'MENOR' ? 'm' : '' }}</option>
+            </select>
+          </div>
+          
+          <button @click="guardarTonoCantante" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-3 rounded-lg w-1/4 shadow">Añadir</button>
+        </div>
+         
+        <div class="max-h-60 overflow-y-auto space-y-2 relative z-0">
+          <div v-for="(item, idx) in singerKeysList" :key="idx" class="p-2 bg-slate-950 border border-slate-800 rounded-xl flex justify-between items-center">
+            <span class="text-white font-bold text-xs">{{ item.cantante }} <span class="text-indigo-400 ml-1">{{ translateChord(item.tono) }}{{ activeSong.modalidad === 'MENOR' ? 'm' : '' }}</span></span>
+            <div class="flex gap-1">
+              <button @click="aplicarTonoCantante(item.tono)" class="bg-indigo-600 text-white px-2 py-1 rounded text-[10px] font-bold shadow">Usar</button>
+              <button v-if="userRole === 'admin'" @click="eliminarTonoCantante(item.cantante)" class="text-rose-400 px-2 py-1 hover:bg-rose-900/30 rounded"><i class="fa-solid fa-trash text-[10px]"></i></button>
+            </div>
+          </div>
+        </div>
+       </div>
+    </div>
+
+    <!-- MODAL ELIMINAR CANCIÓN -->
+    <div v-if="showDeleteModal" class="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" @click.self="showDeleteModal = false">
+      <div class="bg-slate-900 border border-rose-900/50 p-6 rounded-3xl shadow-2xl w-full max-w-sm text-center relative">
+        <div class="w-16 h-16 bg-rose-900/30 rounded-2xl mx-auto flex items-center justify-center mb-4 border border-rose-800/50">
+          <i class="fa-solid fa-triangle-exclamation text-3xl text-rose-500"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">Eliminar Canción</h3>
+        <p class="text-sm text-slate-300 mb-6">¿Estás seguro que deseas eliminar la canción <strong class="text-rose-400">"{{ editForm.titulo }}"</strong>? Esta acción no se puede deshacer.</p>
+        <div class="flex gap-3">
+          <button @click="showDeleteModal = false" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition">Cancelar</button>
+          <button @click="confirmarEliminarCancion" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold transition shadow-lg shadow-rose-900/50">Sí, Eliminar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwPauR61zM-vWdt0O7zGYfPpAxxV-q-j2u7DnErTusokH6Fsy_P-AqfHqaTeyRWROfS/exec";
+    
+    function safeGetLocal(key, def = null) {
+      try { return localStorage.getItem(key) || def; } catch (e) { return def; }
+    }
+    
+    function safeSetLocal(key, val) {
+      try { localStorage.setItem(key, val); } catch (e) {}
+    }
+
+    function encolarCambioLocal(action, payload) {
+      const queue = JSON.parse(safeGetLocal('atril_offline_queue', '[]'));
+      queue.push({ action, payload, timestamp: Date.now() });
+      safeSetLocal('atril_offline_queue', JSON.stringify(queue));
+    }
+
+    const runGas = async (method, ...args) => {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        return new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+            [method](...args);
+        });
+      }
+      if (!navigator.onLine) {
+        encolarCambioLocal(method, args);
+        throw new Error("OFFLINE");
+      }
+      const payload = { action: method };
+      if (method === 'saveSongData') { payload.payload = args[0]; payload.songId = args[1]; }
+      else if (method === 'deleteSong') { payload.songId = args[0]; }
+      else if (method === 'saveRepertorios') { payload.repertoriosObj = args[0]; }
+      else if (method === 'saveSongsOrder') { payload.orderedIds = args[0]; }
+      else if (method === 'saveRitmoOrder') { payload.orderArray = args[0]; }
+      try {
+        const response = await fetch(GAS_WEB_APP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        return await response.json();
+      } catch (err) {
+        encolarCambioLocal(method, args);
+        throw err;
+      }
+    };
+
+    function rgbToHex(colorStr) {
+      if (!colorStr) return '';
+      if (colorStr.startsWith('#')) return colorStr;
+      const rgbMatch = colorStr.match(/\d+/g);
+      if (rgbMatch && rgbMatch.length >= 3) {
+        const r = parseInt(rgbMatch[0]).toString(16).padStart(2, '0');
+        const g = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
+        const b = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
+        return `#${r}${g}${b}`;
+      }
+      return colorStr;
+    }
+
+    function cleanHtmlForStorage(html) {
+      if (!html) return '';
+      if (typeof document === 'undefined') return html;
+
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = html;
+
+      tempDiv.querySelectorAll('strong').forEach(s => {
+        const b = document.createElement('b');
+        b.innerHTML = s.innerHTML;
+        s.parentNode.replaceChild(b, s);
+      });
+
+      const spans = Array.from(tempDiv.querySelectorAll('span')).reverse();
+      spans.forEach(span => {
+        const color = span.style.color;
+        const isBold = span.style.fontWeight === 'bold' || span.style.fontWeight === '700' || parseInt(span.style.fontWeight) >= 600;
+        let inner = span.innerHTML;
+        if (isBold && !/^<b>.*<\/b>$/i.test(inner.trim())) {
+          inner = `<b>${inner}</b>`;
+        }
+        if (color) {
+          const hexColor = rgbToHex(color).toLowerCase();
+          const isDefaultColor = ['#e2e8f0', '#ffffff', '#f8fafc', 'rgb(226, 232, 240)', 'rgb(255, 255, 255)', 'inherit', 'initial', 'transparent'].includes(hexColor);
+          if (!isDefaultColor) {
+            inner = `<font color="${hexColor}">${inner}</font>`;
+          }
+        }
+        const fragment = document.createElement('span');
+        fragment.innerHTML = inner;
+        while (fragment.firstChild) {
+          span.parentNode.insertBefore(fragment.firstChild, span);
+        }
+        span.parentNode.removeChild(span);
+      });
+
+      tempDiv.querySelectorAll('div, p').forEach(block => {
+        if (block.innerHTML === '<br>' || block.innerHTML === '<br/>') {
+          block.innerHTML = '\n';
+        } else {
+          block.insertAdjacentHTML('beforeend', '\n');
+        }
+      });
+
+      let raw = tempDiv.innerHTML;
+
+      raw = raw.replace(/<br\s*\/?>/gi, '\n');
+
+      raw = raw
+        .replace(/<\/?div[^>]*>/gi, '')
+        .replace(/<\/?p[^>]*>/gi, '')
+        .replace(/<\/?o:p[^>]*>/gi, '')
+        .replace(/&nbsp;/gi, ' ');
+
+      raw = raw
+        .replace(/<font[^>]*>([\s]*?)<\/font>/gi, '$1')
+        .replace(/<b>([\s]*?)<\/b>/gi, '$1')
+        .replace(/\r\n/g, '\n');
+
+      raw = raw.replace(/<font color="(?:#e2e8f0|#ffffff|rgb\(226, 232, 240\)|rgb\(255, 255, 255\))">([\s\S]*?)<\/font>/gi, '$1');
+
+      return raw;
+    }
+
+    function formatForEditor(content) {
+      if (!content) return '';
+      return content.replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
+    }
+
+    const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
+    const app = createApp({
+      setup() {
+        const isLoggedIn = ref(false);
+        const userRole = ref(''); 
+        const adminPassword = ref('');
+        const realAdminPassword = ref(safeGetLocal('atril_admin_password', 'pepsi'));
+        const isCheckingPass = ref(false);
+        const loginError = ref('');
+        
+        const showChords = ref(false); 
+        const songs = ref([]);
+        const syncing = ref(false);
+        const isLoading = ref(false);
+        const currentView = ref('generos');
+        const activeContextMode = ref('generos');
+        const activeGenero = ref('');
+        const activeRitmo = ref('');
+        const activeRepertorio = ref('rep1');
+        const searchTerm = ref('');
+        const repSearchTerm = ref('');
+        const useSpanishNomenclatura = ref(safeGetLocal('atril_nomenclatura', 'es') === 'es');
+        const globalActiveSinger = ref(safeGetLocal('atril_global_singer', ''));
+        const activeSong = ref({ id: '', titulo: '', tonoOriginal: 'C', modalidad: 'MAYOR', genero: '', ritmo: '', letraConAcordes: '', tonosCantantes: {} });
+        const currentSongKey = ref('C');
+        const fontSize = ref(Number(safeGetLocal('atril_global_font_size')) || 12);
+        const songFontSizes = ref({});
+        const isFullscreen = ref(false);
+        const isAppFullscreen = ref(false);
+        const keepFullscreen = ref(false);
+        const isMobile = ref(window.innerWidth < 640);
+        const showSingerModal = ref(false);
+        const showDeleteModal = ref(false);
+        const nuevoCantanteNombre = ref('');
+        const nuevoCantanteTono = ref('C');
+        const singerSelectModal = ref({ isOpen: false, type: '', songId: null, currentValue: '' });
+        const repertorios = ref({
+          rep1: { nombre: 'REPERTORIO 1', cantante: '', canciones: [] },
+          rep2: { nombre: 'REPERTORIO 2', cantante: '', canciones: [] },
+          rep3: { nombre: 'REPERTORIO 3', cantante: '', canciones: [] },
+          rep4: { nombre: 'REPERTORIO 4', cantante: '', canciones: [] },
+          rep5: { nombre: 'REPERTORIO 5', cantante: '', canciones: [] },
+          rep6: { nombre: 'REPERTORIO 6', cantante: '', canciones: [] }
+        });
+        const songSingerOverrides = ref({});
+        const customRitmoOrder = ref([]);
+        try {
+          const savedOrder = safeGetLocal('atril_ritmo_order');
+          if (savedOrder) customRitmoOrder.value = JSON.parse(savedOrder);
+        } catch(e) {}
+        const editingSongId = ref(null);
+        const editForm = ref({ id: null, titulo: '', tonoOriginal: '', modalidad: '', genero: '', ritmo: '' });
+        const editorTextarea = ref(null);
+        const visorScroll = ref(null);
+        const selectedColor = ref(null);
+        const isBoldActive = ref(false);
+        const allColors = ['#f87171', '#fbbf24', '#34d399', '#60a5fa', '#c084fc', '#f472b6'];
+        const undoStack = ref([]);
+        const redoStack = ref([]);
+        const chromaticsEN = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const chordMapToES = {
+          'C#': 'DO#', 'D#': 'RE#', 'F#': 'FA#', 'G#': 'SOL#', 'A#': 'LA#',
+          'Db': 'DO#', 'Eb': 'RE#', 'Gb': 'FA#', 'Ab': 'SOL#', 'Bb': 'LA#',
+          'C': 'DO', 'D': 'RE', 'E': 'MI', 'F': 'FA', 'G': 'SOL', 'A': 'LA', 'B': 'SI'
+        };
+        const chordMapToEN = {
+          'DO#': 'C#', 'RE#': 'D#', 'FA#': 'F#', 'SOL#': 'G#', 'LA#': 'A#',
+          'DO': 'C', 'RE': 'D', 'MI': 'E', 'FA': 'F', 'SOL': 'G', 'LA': 'A', 'SI': 'B'
+        };
+
+        async function login(role) {
+          if (role === 'admin') {
+            const inputPass = adminPassword.value.trim();
+            isCheckingPass.value = true;
+            loginError.value = '';
+            if (navigator.onLine) {
+              try {
+                const freshData = await runGas('getInitialData', true);
+                if (freshData && freshData.adminPassword !== undefined && freshData.adminPassword !== null && String(freshData.adminPassword).trim() !== '') {
+                  const remotePass = String(freshData.adminPassword).trim();
+                  realAdminPassword.value = remotePass;
+                  safeSetLocal('atril_admin_password', remotePass);
+                }
+              } catch (e) {
+                console.error("Error al consultar la contraseña en la nube:", e);
+              }
+            }
+            const expectedPass = realAdminPassword.value.trim();
+            isCheckingPass.value = false;
+            if (inputPass === expectedPass || (expectedPass === '' && (inputPass === '' || inputPass === 'admin'))) {
+              userRole.value = 'admin';
+              isLoggedIn.value = true;
+              loginError.value = '';
+              showChords.value = false;
+            } else {
+              loginError.value = 'Contraseña incorrecta';
+              adminPassword.value = '';
+              return;
+            }
+          } else {
+            userRole.value = 'guest';
+            isLoggedIn.value = true;
+            loginError.value = '';
+            showChords.value = false;
+          }
+          currentView.value = 'generos';
+          window.history.replaceState({ view: 'login' }, '');
+          window.history.pushState({ view: 'generos' }, '');
+        }
+
+        function logout() {
+          isLoggedIn.value = false;
+          userRole.value = '';
+          adminPassword.value = '';
+          keepFullscreen.value = false;
+          isAppFullscreen.value = false;
+          isFullscreen.value = false;
+          if (document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          }
+          window.history.replaceState({ view: 'login' }, '');
+        }
+
+        function resetNavegacion() {
+          searchTerm.value = '';
+          irA('generos');
+        }
+
+        function irA(vista, replace = false) {
+          if (currentView.value === vista) return;
+          currentView.value = vista;
+          if (replace) {
+            window.history.replaceState({ view: vista }, '');
+          } else {
+            window.history.pushState({ view: vista }, '');
+          }
+        }
+
+        function getParentView(view) {
+          switch (view) {
+            case 'visor':
+              if (activeContextMode.value === 'busqueda') return 'generos';
+              if (activeContextMode.value === 'repertorio') return 'repertorio_detalle';
+              if (activeContextMode.value === 'lista_genero') return 'lista_genero';
+              return 'generos';
+            case 'creador':
+              return editingSongId.value ? 'visor' : 'generos';
+            case 'lista_genero':
+              return 'ritmos_genero';
+            case 'ritmos_genero':
+              return 'generos';
+            case 'repertorio_detalle':
+              return 'generos';
+            case 'generos':
+              return 'login';
+            default:
+              return 'login';
+          }
+        }
+
+        function retroceder() {
+          if (singerSelectModal.value.isOpen) {
+            singerSelectModal.value.isOpen = false;
+            return;
+          }
+          if (showSingerModal.value) {
+            showSingerModal.value = false;
+            return;
+          }
+          if (showDeleteModal.value) {
+            showDeleteModal.value = false;
+            return;
+          }
+          if (searchTerm.value !== '' && currentView.value !== 'visor' && currentView.value !== 'creador') {
+            searchTerm.value = '';
+            return;
+          }
+          if (currentView.value === 'generos') {
+            logout();
+            return;
+          }
+          if (window.history.state && window.history.state.view && window.history.state.view !== currentView.value) {
+            window.history.back();
+          } else {
+            const parent = getParentView(currentView.value);
+            if (parent === 'login') {
+              logout();
+            } else {
+              irA(parent, true);
+            }
+          }
+        }
+
+        async function recargarDatos(esSilencioso = false) {
+          if (typeof esSilencioso !== 'boolean') esSilencioso = false;
+          if (!esSilencioso || !songs.value || songs.value.length === 0) syncing.value = true;
+          try {
+            const data = await runGas('getInitialData', !esSilencioso);
+            if (data) {
+              if (data.songs) {
+                songs.value = data.songs;
+                safeSetLocal('atril_songs_data', JSON.stringify(data.songs));
+              }
+              if (data.repertorios) {
+                repertorios.value = data.repertorios;
+                safeSetLocal('atril_repertorios_data', JSON.stringify(data.repertorios));
+              }
+              if (data.ritmosOrder) {
+                customRitmoOrder.value = data.ritmosOrder;
+                safeSetLocal('atril_ritmo_order', JSON.stringify(data.ritmosOrder));
+              }
+              if (data.adminPassword !== undefined && data.adminPassword !== null && String(data.adminPassword).trim() !== '') {
+                realAdminPassword.value = String(data.adminPassword).trim();
+                safeSetLocal('atril_admin_password', realAdminPassword.value);
+              }
+            }
+          } catch (err) {
+            console.error("Error al recargar:", err);
+          } finally {
+            syncing.value = false;
+            isLoading.value = false;
+          }
+        }
+
+        async function procesarSincronizacion() {
+          if (navigator.onLine) {
+            const queue = JSON.parse(safeGetLocal('atril_offline_queue', '[]'));
+            if (queue.length > 0) {
+              syncing.value = true;
+              for (const item of queue) {
+                try {
+                  const args = Array.isArray(item.payload) ? item.payload : [item.payload];
+                  await runGas(item.action, ...args);
+                } catch (e) {
+                  console.error("Error sincronizando:", e);
+                }
+              }
+              safeSetLocal('atril_offline_queue', '[]');
+            }
+          }
+          await recargarDatos(true);
+        }
+
+        watch(visorScroll, (el) => {
+          if (!el) return;
+          let initialDist = 0;
+          let initialSize = 12;
+          const getDynamicMaxFontSize = () => {
+            if (!el) return 35;
+            const pre = el.querySelector('pre');
+            if (!pre) return 35;
+            const lines = pre.innerText ? pre.innerText.split('\n') : [];
+            let maxCharCount = 0;
+            lines.forEach(l => { if (l.length > maxCharCount) maxCharCount = l.length; });
+            if (maxCharCount > 0) {
+              const availableWidth = el.clientWidth - 12;
+              if (availableWidth > 0) {
+                const calculatedMax = Math.floor((availableWidth / maxCharCount) / 0.6);
+                return Math.max(10, Math.min(35, calculatedMax));
+              }
+            }
+            return 35;
+          };
+          const handleTouchStart = (e) => {
+            if (e.touches && e.touches.length === 2) {
+              initialDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+              initialSize = effectiveFontSize.value;
+            } else { initialDist = 0; }
+          };
+          const handleTouchMove = (e) => {
+            if (!e.touches || e.touches.length !== 2 || initialDist <= 0) return;
+            if (e.cancelable) e.preventDefault();
+            const currentDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            const scale = currentDist / initialDist;
+            let newSize = Math.round((initialSize * scale) * 10) / 10;
+            const dynamicMax = getDynamicMaxFontSize();
+            newSize = Math.max(7, Math.min(dynamicMax, newSize));
+            if (activeSong.value && activeSong.value.id) {
+              songFontSizes.value = { ...songFontSizes.value, [activeSong.value.id]: newSize };
+              safeSetLocal('atril_song_fonts', JSON.stringify(songFontSizes.value));
+            } else {
+              fontSize.value = newSize;
+              safeSetLocal('atril_global_font_size', newSize.toString());
+            }
+          };
+          const handleTouchEnd = (e) => {
+            if (!e.touches || e.touches.length < 2) initialDist = 0;
+          };
+          el.addEventListener('touchstart', handleTouchStart, { passive: true });
+          el.addEventListener('touchmove', handleTouchMove, { passive: false });
+          el.addEventListener('touchend', handleTouchEnd, { passive: true });
+          el.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+        });
+
+        onMounted(async () => {
+          window.addEventListener('popstate', (event) => {
+            if (showDeleteModal.value) { showDeleteModal.value = false; return; }
+            if (showSingerModal.value) { showSingerModal.value = false; return; }
+            if (singerSelectModal.value.isOpen) { singerSelectModal.value.isOpen = false; return; }
+            
+            if (event.state && event.state.view) {
+              currentView.value = event.state.view;
+            } else {
+              currentView.value = isLoggedIn.value ? 'generos' : 'login';
+            }
+          });
+          window.addEventListener('resize', () => { isMobile.value = window.innerWidth < 640; });
+          window.addEventListener('online', () => { procesarSincronizacion(); });
+          document.addEventListener('fullscreenchange', () => {
+            const nativeFull = !!document.fullscreenElement;
+            if (!nativeFull) {
+              if (!isLoggedIn.value || currentView.value === 'generos') {
+                keepFullscreen.value = false; isAppFullscreen.value = false; isFullscreen.value = false;
+              } else if (keepFullscreen.value) { isAppFullscreen.value = true;
+              } else { isAppFullscreen.value = false; isFullscreen.value = false; }
+            }
+          });
+          
+          const cachedSongs = safeGetLocal('atril_songs_data');
+          if (cachedSongs) {
+            try { songs.value = JSON.parse(cachedSongs); isLoading.value = false; } catch (e) { isLoading.value = false; }
+          } else { isLoading.value = true; }
+          
+          const cachedRep = safeGetLocal('atril_repertorios_data');
+          if (cachedRep) {
+            try { repertorios.value = JSON.parse(cachedRep); } catch (e) {}
+          }
+          const cachedFontSizes = safeGetLocal('atril_song_fonts');
+          if (cachedFontSizes) {
+            try { songFontSizes.value = JSON.parse(cachedFontSizes); } catch (e) {}
+          }
+          
+          if (navigator.onLine) {
+            await procesarSincronizacion();
+          } else {
+            isLoading.value = false;
+          }
+        });
+
+        const effectiveFontSize = computed(() => {
+          let val = 15;
+          if (activeSong.value && activeSong.value.id && songFontSizes.value[activeSong.value.id]) {
+            val = Number(songFontSizes.value[activeSong.value.id]);
+          } else {
+            const customGlobal = safeGetLocal('atril_global_font_size');
+            if (customGlobal !== null && customGlobal !== undefined && customGlobal !== '') val = Number(customGlobal);
+            else if (isMobile.value) val = showChords.value ? 10 : 13;
+            else val = 15;
+          }
+          return Math.round(Math.max(7, Math.min(35, val)) * 10) / 10;
+        });
+
+        const computedLineHeight = computed(() => {
+          const factor = showChords.value ? 1.3 : 1.2;
+          return Math.round(effectiveFontSize.value * factor) + 'px';
+        });
+
+        function toggleChords() {
+          showChords.value = !showChords.value;
+          safeSetLocal('atril_show_chords', showChords.value.toString());
+        }
+
+        const cantantesDisponibles = computed(() => {
+          const set = new Set();
+          (songs.value || []).forEach(s => {
+            if (s && s.tonosCantantes) Object.keys(s.tonosCantantes).forEach(k => set.add(k.toUpperCase()));
+          });
+          Object.values(repertorios.value || {}).forEach(r => {
+            if (r && r.cantante) set.add(r.cantante.toUpperCase());
+          });
+          return Array.from(set).sort();
+        });
+
+        const listaGeneros = computed(() => {
+          const set = new Set();
+          (songs.value || []).forEach(s => { if (s && s.genero) set.add(s.genero.toUpperCase()); });
+          return Array.from(set).sort();
+        });
+
+        const allRitmos = computed(() => {
+          const set = new Set();
+          (songs.value || []).forEach(s => { if (s && s.ritmo) set.add(s.ritmo.toUpperCase()); });
+          return Array.from(set).sort();
+        });
+
+        const listaRitmosDelGenero = computed(() => {
+          const set = new Set();
+          (songs.value || []).filter(s => s && s.genero && s.genero.toUpperCase() === activeGenero.value.toUpperCase())
+               .forEach(s => { if (s.ritmo) set.add(s.ritmo.toUpperCase()); });
+          
+          let arr = Array.from(set).sort();
+          arr.sort((a, b) => {
+            let idxA = customRitmoOrder.value.indexOf(a);
+            let idxB = customRitmoOrder.value.indexOf(b);
+            if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+            if (idxA === -1) return 1;
+            if (idxB === -1) return -1;
+            return idxA - idxB;
+          });
+          return arr;
+        });
+
+        const songsByActiveGeneroAndRitmo = computed(() => {
+          return (songs.value || []).filter(s => 
+            s && s.genero && s.genero.toUpperCase() === activeGenero.value.toUpperCase() &&
+            s.ritmo && s.ritmo.toUpperCase() === activeRitmo.value.toUpperCase()
+          );
+        });
+
+        const filteredSongs = computed(() => {
+          if (!searchTerm.value) return songs.value || [];
+          const q = searchTerm.value.toLowerCase();
+          return (songs.value || []).filter(s => 
+            s && (
+              (s.titulo && s.titulo.toLowerCase().includes(q)) ||
+              (s.genero && s.genero.toLowerCase().includes(q)) ||
+              (s.ritmo && s.ritmo.toLowerCase().includes(q)) ||
+              (s.id && String(s.id).includes(q))
+            )
+          );
+        });
+
+        const filteredAvailableForRep = computed(() => {
+          if (!repSearchTerm.value) return [];
+          const q = repSearchTerm.value.toLowerCase();
+          const currentRepSongs = repertorios.value[activeRepertorio.value]?.canciones || [];
+          return (songs.value || []).filter(s => 
+            s && !currentRepSongs.includes(s.id) &&
+            ((s.titulo && s.titulo.toLowerCase().includes(q)) || String(s.id).includes(q))
+          ).slice(0, 8);
+        });
+
+        const singerKeysList = computed(() => {
+          if (!activeSong.value || !activeSong.value.tonosCantantes) return [];
+          return Object.entries(activeSong.value.tonosCantantes).map(([cantante, tono]) => ({ cantante, tono }));
+        });
+
+        const currentContextList = computed(() => {
+          if (activeContextMode.value === 'busqueda' || searchTerm.value) return filteredSongs.value.map(s => s.id);
+          if (activeContextMode.value === 'lista_genero') return songsByActiveGeneroAndRitmo.value.map(s => s.id);
+          if (activeContextMode.value === 'repertorio') return repertorios.value[activeRepertorio.value]?.canciones || [];
+          return [];
+        });
+
+        const activeSongIndexInContext = computed(() => {
+          return currentContextList.value.findIndex(id => String(id) === String(activeSong.value.id));
+        });
+
+        const prevSongData = computed(() => {
+          const idx = activeSongIndexInContext.value;
+          if (idx > 0) {
+            const prevId = currentContextList.value[idx - 1];
+            return songs.value.find(s => String(s.id) === String(prevId));
+          }
+          return null;
+        });
+
+        const nextSongData = computed(() => {
+          const idx = activeSongIndexInContext.value;
+          if (idx >= 0 && idx < currentContextList.value.length - 1) {
+            const nextId = currentContextList.value[idx + 1];
+            return songs.value.find(s => String(s.id) === String(nextId));
+          }
+          return null;
+        });
+
+        function contarCancionesPorGenero(gen) {
+          if (!songs.value) return 0;
+          return songs.value.filter(s => s && s.genero && s.genero.toUpperCase() === gen.toUpperCase()).length;
+        }
+
+        function contarCancionesPorRitmo(ritmo) {
+          if (!songs.value) return 0;
+          return songs.value.filter(s => s && s.ritmo && s.ritmo.toUpperCase() === ritmo.toUpperCase() && s.genero && s.genero.toUpperCase() === activeGenero.value.toUpperCase()).length;
+        }
+
+        async function onReorderEnd(evt, context) {
+          const { oldIndex, newIndex } = evt;
+          if (oldIndex === newIndex || oldIndex === undefined || newIndex === undefined) return;
+          
+          if (context === 'repertorio_detalle') {
+            const list = repertorios.value[activeRepertorio.value].canciones;
+            const moved = list.splice(oldIndex, 1)[0];
+            list.splice(newIndex, 0, moved);
+            await guardarRepertoriosEnNube();
+          } else if (context === 'lista_genero' || context === 'busqueda') {
+            const currentSublist = context === 'lista_genero' ? songsByActiveGeneroAndRitmo.value : filteredSongs.value;
+            const movedItem = currentSublist[oldIndex];
+            const targetItem = currentSublist[newIndex];
+            if (movedItem && targetItem) {
+              const oldGlobalIndex = songs.value.findIndex(s => String(s.id) === String(movedItem.id));
+              const newGlobalIndex = songs.value.findIndex(s => String(s.id) === String(targetItem.id));
+              if (oldGlobalIndex !== -1 && newGlobalIndex !== -1) {
+                const [moved] = songs.value.splice(oldGlobalIndex, 1);
+                songs.value.splice(newGlobalIndex, 0, moved);
+                songs.value.forEach((s, idx) => { s.orden = idx + 1; });
+                safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
+                const reorderedIds = songs.value.map(s => s.id);
+                syncing.value = true;
+                await runGas('saveSongsOrder', reorderedIds);
+                syncing.value = false;
+              }
+            }
+          } else if (context === 'ritmos') {
+            const arr = [...listaRitmosDelGenero.value];
+            const moved = arr.splice(oldIndex, 1)[0];
+            arr.splice(newIndex, 0, moved);
+            let currentOrder = [...customRitmoOrder.value];
+            currentOrder = currentOrder.filter(x => !arr.includes(x));
+            customRitmoOrder.value = [...currentOrder, ...arr];
+            safeSetLocal('atril_ritmo_order', JSON.stringify(customRitmoOrder.value));
+            syncing.value = true;
+            try { await runGas('saveRitmoOrder', customRitmoOrder.value); } catch(e) {}
+            syncing.value = false;
+          }
+        }
+
+        async function guardarRepertoriosEnNube() {
+          syncing.value = true;
+          await runGas('saveRepertorios', repertorios.value);
+          syncing.value = false;
+          safeSetLocal('atril_repertorios_data', JSON.stringify(repertorios.value));
+        }
+
+        function agregarCancionARepertorio(songId) {
+          const rep = repertorios.value[activeRepertorio.value];
+          if (rep && !rep.canciones.includes(songId)) {
+            rep.canciones.push(songId);
+            repSearchTerm.value = '';
+            guardarRepertoriosEnNube();
+          }
+        }
+
+        function removerCancionDeRepertorio(songId) {
+          const rep = repertorios.value[activeRepertorio.value];
+          if (rep) {
+            rep.canciones = rep.canciones.filter(id => String(id) !== String(songId));
+            guardarRepertoriosEnNube();
+          }
+        }
+
+        function translateChord(chord) {
+          if (!chord) return '';
+          return useSpanishNomenclatura.value ? (chordMapToES[chord] || chord) : (chordMapToEN[chord] || chord);
+        }
+
+        function toggleNomenclatura() {
+          useSpanishNomenclatura.value = !useSpanishNomenclatura.value;
+          safeSetLocal('atril_nomenclatura', useSpanishNomenclatura.value ? 'es' : 'en');
+        }
+
+        function normalizeKey(k) {
+          if (!k) return 'C';
+          let key = k.toUpperCase().trim();
+          if (chordMapToEN[key]) key = chordMapToEN[key];
+          return chromaticsEN.includes(key) ? key : 'C';
+        }
+
+        function getValidSongId(song) { return song && song.id ? song.id : '0'; }
+
+        function getSongTitle(id) {
+          const s = songs.value.find(x => String(x.id) === String(id));
+          return s ? s.titulo : 'Canción ' + id;
+        }
+
+        function getSongKeyAndModality(id) {
+          const s = songs.value.find(x => String(x.id) === String(id));
+          if (!s) return 'C';
+          return translateChord(normalizeKey(s.tonoOriginal)) + (s.modalidad === 'MENOR' ? 'm' : '');
+        }
+
+        function isRepertoryContext() {
+          return activeContextMode.value === 'repertorio';
+        }
+
+        function getSongSinger(id, forceRep = false) {
+          if (forceRep || isRepertoryContext()) {
+            if (songSingerOverrides.value[id]) return songSingerOverrides.value[id];
+            if (repertorios.value[activeRepertorio.value] && repertorios.value[activeRepertorio.value].cantante) {
+              return repertorios.value[activeRepertorio.value].cantante;
+            }
+            return '';
+          }
+          return globalActiveSinger.value || '';
+        }
+
+        function getSingerKeyDisplay(id, forceRep = false) {
+          const singer = getSongSinger(id, forceRep);
+          if (!singer) return null;
+          const s = songs.value.find(x => String(x.id) === String(id));
+          if (s && s.tonosCantantes && s.tonosCantantes[singer.toUpperCase()]) {
+            return translateChord(normalizeKey(s.tonosCantantes[singer.toUpperCase()])) + (s.modalidad === 'MENOR' ? 'm' : '');
+          }
+          return null;
+        }
+
+        function getDisplayKeyAndModality(id, forceRep = false) {
+          const s = songs.value.find(x => String(x.id) === String(id));
+          if (!s) return 'C';
+          const singerKey = getSingerKeyDisplay(id, forceRep);
+          if (singerKey) {
+            return `<span class="text-indigo-400"><i class="fa-solid fa-microphone text-[8px] mr-1"></i>${singerKey}</span>`;
+          }
+          return translateChord(normalizeKey(s.tonoOriginal)) + (s.modalidad === 'MENOR' ? 'm' : '');
+        }
+
+        function getSongKeyForContext(songId) {
+          const s = songs.value.find(x => String(x.id) === String(songId));
+          if (!s) return '';
+          const singerKey = getSingerKeyDisplay(songId);
+          if (singerKey) return singerKey;
+          return translateChord(normalizeKey(s.tonoOriginal)) + (s.modalidad === 'MENOR' ? 'm' : '');
+        }
+
+        function openSingerSelect(type, songId, currentVal) {
+          singerSelectModal.value = { isOpen: true, type, songId, currentValue: currentVal || '' };
+        }
+
+        function selectSingerOption(singerName) {
+          const { type, songId } = singerSelectModal.value;
+          if (type === 'global') {
+            globalActiveSinger.value = singerName;
+            safeSetLocal('atril_global_singer', singerName);
+          } else if (type === 'repertorio_general') {
+            if (repertorios.value[activeRepertorio.value]) {
+              repertorios.value[activeRepertorio.value].cantante = singerName;
+              guardarRepertoriosEnNube();
+            }
+          } else if (type === 'repertorio_cancion') {
+            if (songId) songSingerOverrides.value[songId] = singerName;
+          }
+          singerSelectModal.value.isOpen = false;
+        }
+
+        function normalizeRootToEN(rootStr) {
+          if (!rootStr) return 'C';
+          let upper = rootStr.toUpperCase();
+          if (chordMapToEN[upper]) return chordMapToEN[upper];
+          const flatMap = { 'DB': 'C#', 'EB': 'D#', 'GB': 'F#', 'AB': 'G#', 'BB': 'A#' };
+          return flatMap[upper] || upper;
+        }
+
+        function transposeSingleRoot(rootStr, semitones, useSpanish) {
+          let normEN = normalizeRootToEN(rootStr);
+          let idx = chromaticsEN.indexOf(normEN);
+          if (idx === -1) return rootStr;
+          let newIdx = (idx + semitones) % 12;
+          if (newIdx < 0) newIdx += 12;
+          let newRootEN = chromaticsEN[newIdx];
+          return useSpanish ? (chordMapToES[newRootEN] || newRootEN) : newRootEN;
+        }
+
+        function transponerAcorde(chord, semitones, useSpanish) {
+          if (!chord) return '';
+          chord = chord.trim();
+          if (chord.includes('/')) {
+            const parts = chord.split('/');
+            const mainChord = transponerAcorde(parts[0], semitones, useSpanish);
+            const bassMatch = parts[1].match(/^(?:DO|RE|MI|FA|SOL|LA|SI|[A-G])(?:#|b|♯|♭)?/i);
+            if (bassMatch) {
+              const transposedBass = transposeSingleRoot(bassMatch[0], semitones, useSpanish);
+              return mainChord + '/' + transposedBass + parts[1].slice(bassMatch[0].length);
+            }
+            return mainChord + '/' + parts[1];
+          }
+          let match = chord.match(/^(?:DO|RE|MI|FA|SOL|LA|SI)(?:#|b|♯|♭)?/i) || chord.match(/^[A-G](?:#|b|♯|♭)?/i);
+          if (!match) return chord;
+          const originalRoot = match[0];
+          return transposeSingleRoot(originalRoot, semitones, useSpanish) + chord.slice(originalRoot.length);
+        }
+
+        function calcularSemitonos(origen, destino) {
+          let o = chromaticsEN.indexOf(normalizeKey(origen));
+          let d = chromaticsEN.indexOf(normalizeKey(destino));
+          if (o === -1 || d === -1) return 0;
+          let diff = d - o;
+          if (diff > 6) diff -= 12;
+          if (diff < -6) diff += 12;
+          return diff;
+        }
+
+        function isStructureToken(token) {
+          if (!token) return true;
+          let clean = token.replace(/^[^a-zA-Z0-9\#b♯♭ºΔ+]+|[^a-zA-Z0-9\#b♯♭ºΔ+]+$/g, '').trim();
+          if (!clean) return true;
+          if (/^(?:\||\+|%|x\d+|\d+x|\d+\.|\d+|-|\|{|}|INTRO|VERSO|CORO|ESTROFA|PUENTE|OUTRO|SOLO|INTERLUDIO|FINAL|CODA|BIS|PRE-CORO|PRECORO|RITMO|TONO|PAUSA|CORTE|PARADA|FIN)/i.test(clean)) return true;
+          return false;
+        }
+
+        function isChord(token) {
+          if (!token) return false;
+          let clean = token.replace(/^[^a-zA-Z0-9\#b♯♭ºΔ+]+|[^a-zA-Z0-9\#b♯♭ºΔ+]+$/g, '').trim();
+          if (!clean) return false;
+          const chordRegex = /^(?:DO|RE|MI|FA|SOL|LA|SI|[A-G])(?:#|b|♯|♭)?(?:m|maj|min|dim|aug|sus|add|M|[0-9]|º|Δ|\+)*\d*(?:\/(?:DO|RE|MI|FA|SOL|LA|SI|[A-G])(?:#|b|♯|♭)?)?$/i;
+          return chordRegex.test(clean);
+        }
+
+        function transponerTexto(htmlOrText, semitones, useSpanish, showChords) {
+          if (!htmlOrText) return '';
+          
+          const formatAndTransposeChord = (chordStr) => {
+            const transposed = transponerAcorde(chordStr, semitones, useSpanish);
+            return `<b class="font-bold text-yellow-400" style="color: #facc15; font-weight: bold;">${transposed}</b>`;
+          };
+          
+          const lines = htmlOrText.split(/\r?\n/);
+          
+          const resultLines = lines.map(line => {
+            const plainLine = line.replace(/<[^>]+>/g, '').trim();
+            if (!plainLine) return line;
+
+            const plainTextNoBrackets = plainLine.replace(/\[[^\]]+\]/g, ' ');
+            const plainTokens = plainTextNoBrackets.split(/\s+/).filter(Boolean);
+
+            let chordCount = 0;
+            let wordCount = 0;
+
+            plainTokens.forEach(tok => {
+              if (isChord(tok)) {
+                chordCount++;
+              } else if (!isStructureToken(tok)) {
+                wordCount++;
+              }
+            });
+
+            const isChordLine = chordCount > 0 && wordCount === 0;
+            const tokenRegex = /(<[^>]+>|\[[^\]]+\]|\S+|\s+)/g;
+            const tokens = line.match(tokenRegex) || [line];
+
+            if (isChordLine) {
+              if (!showChords) return null;
+
+              return tokens.map(tok => {
+                if (tok.startsWith('<') && tok.endsWith('>')) {
+                  return tok;
+                }
+                if (tok.startsWith('[') && tok.endsWith(']')) {
+                  const inner = tok.slice(1, -1).trim();
+                  if (isChord(inner)) {
+                    return formatAndTransposeChord(inner);
+                  }
+                  return tok;
+                }
+                const trimmed = tok.trim();
+                if (trimmed && isChord(trimmed)) {
+                  const leading = tok.match(/^\s*/)[0];
+                  const trailing = tok.match(/\s*$/)[0];
+                  return leading + formatAndTransposeChord(trimmed) + trailing;
+                }
+                return tok;
+              }).join('');
+            } else {
+              return tokens.map(tok => {
+                if (tok.startsWith('<') && tok.endsWith('>')) {
+                  return tok;
+                }
+                if (tok.startsWith('[') && tok.endsWith(']')) {
+                  const inner = tok.slice(1, -1).trim();
+                  if (isChord(inner)) {
+                    return showChords ? formatAndTransposeChord(inner) : '';
+                  }
+                  return tok;
+                }
+                return tok;
+              }).join('');
+            }
+          }).filter(l => l !== null);
+
+          return resultLines.join('\n');
+        }
+
+        const renderedChordChart = computed(() => {
+          if (!activeSong.value || !activeSong.value.letraConAcordes) return '';
+          const semitones = calcularSemitonos(activeSong.value.tonoOriginal, currentSongKey.value);
+          return transponerTexto(
+            activeSong.value.letraConAcordes,
+            semitones,
+            useSpanishNomenclatura.value,
+            showChords.value
+          );
+        });
+
+        function playSong(song, contextMode = 'generos') {
+          if (!song) return;
+          activeSong.value = JSON.parse(JSON.stringify(song));
+          activeContextMode.value = contextMode;
+          
+          let singerKey = getSingerKeyDisplay(song.id);
+          if (singerKey) {
+            let norm = normalizeKey(song.tonosCantantes[getSongSinger(song.id).toUpperCase()]);
+            currentSongKey.value = norm;
+          } else {
+            currentSongKey.value = normalizeKey(song.tonoOriginal);
+          }
+          irA('visor');
+        }
+
+        function playFromSearch(index) {
+          const song = filteredSongs.value[index];
+          if (song) playSong(song, 'busqueda');
+        }
+
+        function playFromGenre(index) {
+          const song = songsByActiveGeneroAndRitmo.value[index];
+          if (song) playSong(song, 'lista_genero');
+        }
+
+        function playFromRepertory(index) {
+          const repSongs = repertorios.value[activeRepertorio.value]?.canciones || [];
+          const songId = repSongs[index];
+          const song = songs.value.find(s => String(s.id) === String(songId));
+          if (song) playSong(song, 'repertorio');
+        }
+
+        function navegarCancionContexto(direction) {
+          const list = currentContextList.value;
+          const currentIdx = activeSongIndexInContext.value;
+          if (currentIdx === -1) return;
+          const nextIdx = currentIdx + direction;
+          if (nextIdx >= 0 && nextIdx < list.length) {
+            const nextId = list[nextIdx];
+            const song = songs.value.find(s => String(s.id) === String(nextId));
+            if (song) playSong(song, activeContextMode.value);
+          }
+        }
+
+        function transponer(steps) {
+          let currentEN = normalizeKey(currentSongKey.value);
+          let idx = chromaticsEN.indexOf(currentEN);
+          if (idx !== -1) {
+            let newIdx = (idx + steps) % 12;
+            if (newIdx < 0) newIdx += 12;
+            currentSongKey.value = chromaticsEN[newIdx];
+          }
+        }
+
+        function resetTono() {
+          if (activeSong.value) {
+            currentSongKey.value = normalizeKey(activeSong.value.tonoOriginal);
+          }
+        }
+
+        function ajustarZoom(delta) {
+          let current = effectiveFontSize.value;
+          let newSize = Math.round((current + delta) * 10) / 10;
+          newSize = Math.max(7, Math.min(35, newSize));
+          if (activeSong.value && activeSong.value.id) {
+            songFontSizes.value = { ...songFontSizes.value, [activeSong.value.id]: newSize };
+            safeSetLocal('atril_song_fonts', JSON.stringify(songFontSizes.value));
+          } else {
+            fontSize.value = newSize;
+            safeSetLocal('atril_global_font_size', newSize.toString());
+          }
+        }
+
+        function resetAutoZoom() {
+          if (activeSong.value && activeSong.value.id) {
+            delete songFontSizes.value[activeSong.value.id];
+            safeSetLocal('atril_song_fonts', JSON.stringify(songFontSizes.value));
+          }
+        }
+
+        function toggleFullscreen() {
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().then(() => {
+              isFullscreen.value = true;
+              keepFullscreen.value = true;
+            }).catch(() => {
+              isAppFullscreen.value = !isAppFullscreen.value;
+              keepFullscreen.value = isAppFullscreen.value;
+            });
+          } else {
+            document.exitFullscreen().then(() => {
+              isFullscreen.value = false;
+              keepFullscreen.value = false;
+              isAppFullscreen.value = false;
+            }).catch(() => {
+              isAppFullscreen.value = false;
+              keepFullscreen.value = false;
+            });
+          }
+        }
+
+        function selectGenero(gen) {
+          activeGenero.value = gen;
+          irA('ritmos_genero');
+        }
+
+        function selectRitmo(ritmo) {
+          activeRitmo.value = ritmo;
+          irA('lista_genero');
+        }
+
+        function abrirRepertorio(repKey) {
+          activeRepertorio.value = repKey;
+          irA('repertorio_detalle');
+        }
+
+        function iniciarPresentacionSetlist() {
+          const rep = repertorios.value[activeRepertorio.value];
+          if (rep && rep.canciones && rep.canciones.length > 0) {
+            const firstSongId = rep.canciones[0];
+            const song = songs.value.find(s => String(s.id) === String(firstSongId));
+            if (song) playSong(song, 'repertorio');
+          }
+        }
+
+        function abrirCreador() {
+          editingSongId.value = null;
+          editForm.value = { id: null, titulo: '', tonoOriginal: '', modalidad: '', genero: activeGenero.value || '', ritmo: activeRitmo.value || '', letraConAcordes: '' };
+          undoStack.value = [];
+          redoStack.value = [];
+          irA('creador');
+          nextTick(() => {
+            if (editorTextarea.value) editorTextarea.value.innerHTML = '';
+          });
+        }
+
+        function abrirEditarCancionActual() {
+          if (!activeSong.value) return;
+          editingSongId.value = String(activeSong.value.id);
+          editForm.value = {
+            id: String(activeSong.value.id),
+            titulo: activeSong.value.titulo || '',
+            tonoOriginal: activeSong.value.tonoOriginal || 'C',
+            modalidad: activeSong.value.modalidad || 'MAYOR',
+            genero: activeSong.value.genero || '',
+            ritmo: activeSong.value.ritmo || '',
+            letraConAcordes: activeSong.value.letraConAcordes || ''
+          };
+          undoStack.value = [];
+          redoStack.value = [];
+          irA('creador');
+          nextTick(() => {
+            if (editorTextarea.value) {
+              editorTextarea.value.innerHTML = formatForEditor(activeSong.value.letraConAcordes);
+            }
+          });
+        }
+
+        async function guardarCancion() {
+          if (!editForm.value.titulo) return alert('El título es obligatorio.');
+          
+          let rawHtml = editorTextarea.value ? editorTextarea.value.innerHTML : (editForm.value.letraConAcordes || '');
+          const cleanedContent = cleanHtmlForStorage(rawHtml);
+          
+          let songId = editingSongId.value || editForm.value.id;
+          if (!songId) {
+            let maxId = 0;
+            (songs.value || []).forEach(s => {
+              let num = parseInt(s.id, 10);
+              if (!isNaN(num) && num > maxId) maxId = num;
+            });
+            songId = String(maxId + 1);
+          } else {
+            songId = String(songId);
+          }
+
+          let existingSong = songs.value.find(s => String(s.id) === songId);
+          let existingTonos = existingSong ? (existingSong.tonosCantantes || {}) : (activeSong.value ? (activeSong.value.tonosCantantes || {}) : {});
+          
+          const songObj = {
+            id: songId,
+            titulo: (editForm.value.titulo || '').toUpperCase().trim(),
+            tonoOriginal: normalizeKey(editForm.value.tonoOriginal),
+            modalidad: (editForm.value.modalidad || 'MAYOR').toUpperCase().trim(),
+            genero: (editForm.value.genero || '').toUpperCase().trim(),
+            ritmo: (editForm.value.ritmo || '').toUpperCase().trim(),
+            letraConAcordes: cleanedContent,
+            tonosCantantes: existingTonos
+          };
+
+          syncing.value = true;
+          try {
+            await runGas('saveSongData', songObj, songId);
+          } catch(e) {
+            console.error("Error al guardar en la nube:", e);
+          } finally {
+            syncing.value = false;
+          }
+
+          const existingIdx = songs.value.findIndex(s => String(s.id) === songId);
+          if (existingIdx !== -1) {
+            songs.value[existingIdx] = songObj;
+          } else {
+            songs.value.push(songObj);
+          }
+          
+          safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
+          activeSong.value = JSON.parse(JSON.stringify(songObj));
+          currentSongKey.value = normalizeKey(songObj.tonoOriginal);
+          editingSongId.value = songId;
+          
+          irA('visor', true);
+        }
+
+        function eliminarCancion() {
+          showDeleteModal.value = true;
+        }
+
+        async function confirmarEliminarCancion() {
+          const songId = editingSongId.value || (editForm.value ? editForm.value.id : null);
+          if (songId) {
+            songs.value = songs.value.filter(s => String(s.id) !== String(songId));
+            safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
+            
+            showDeleteModal.value = false;
+            syncing.value = true;
+            try {
+              await runGas('deleteSong', String(songId));
+            } catch(e) {}
+            syncing.value = false;
+            
+            irA('generos');
+          }
+        }
+
+        function saveEditorState() {
+          if (!editorTextarea.value) return;
+          const html = editorTextarea.value.innerHTML;
+          if (undoStack.value.length === 0 || undoStack.value[undoStack.value.length - 1] !== html) {
+            undoStack.value.push(html);
+            redoStack.value = [];
+          }
+        }
+
+        function undo() {
+          if (undoStack.value.length > 0 && editorTextarea.value) {
+            redoStack.value.push(editorTextarea.value.innerHTML);
+            const prev = undoStack.value.pop();
+            editorTextarea.value.innerHTML = prev;
+          }
+        }
+
+        function redo() {
+          if (redoStack.value.length > 0 && editorTextarea.value) {
+            undoStack.value.push(editorTextarea.value.innerHTML);
+            const next = redoStack.value.pop();
+            editorTextarea.value.innerHTML = next;
+          }
+        }
+
+        const aplicarNegrita = () => {
+          document.execCommand('styleWithCSS', false, false);
+          isBoldActive.value = !isBoldActive.value;
+          document.execCommand('bold', false, null);
+          const sel = window.getSelection();
+          if (sel && sel.isCollapsed && sel.anchorNode) {
+            let bParent = sel.anchorNode.parentElement;
+            while (bParent && bParent !== editorTextarea.value) {
+              if (bParent.tagName === 'B' || bParent.tagName === 'STRONG') {
+                const parent = bParent.parentNode;
+                while (bParent.firstChild) parent.insertBefore(bParent.firstChild, bParent);
+                parent.removeChild(bParent);
+                break;
+              }
+              bParent = bParent.parentElement;
+            }
+          }
+          updateEditorFormattingState(false);
+          if (editorTextarea.value) editorTextarea.value.focus();
+        };
+
+        const applyColor = (color) => {
+          document.execCommand('styleWithCSS', false, false);
+          if (selectedColor.value === color) {
+            selectedColor.value = null;
+            document.execCommand('foreColor', false, '#e2e8f0');
+            const sel = window.getSelection();
+            if (sel && sel.isCollapsed && sel.anchorNode) {
+              let fontParent = sel.anchorNode.parentElement;
+              while (fontParent && fontParent !== editorTextarea.value) {
+                if (fontParent.tagName === 'FONT') {
+                  const parent = fontParent.parentNode;
+                  while (fontParent.firstChild) parent.insertBefore(fontParent.firstChild, fontParent);
+                  parent.removeChild(fontParent);
+                  break;
+                }
+                fontParent = fontParent.parentElement;
+              }
+            }
+          } else {
+            selectedColor.value = color;
+            document.execCommand('foreColor', false, color);
+          }
+          updateEditorFormattingState(false);
+          if (editorTextarea.value) editorTextarea.value.focus();
+        };
+
+        const updateEditorFormattingState = (fromEvent = false) => {
+          if (editorTextarea.value) {
+            try {
+              isBoldActive.value = document.queryCommandState('bold');
+            } catch (e) {}
+
+            try {
+              const colorVal = document.queryCommandValue('foreColor');
+              if (colorVal) {
+                const hex = rgbToHex(colorVal).toLowerCase();
+                if (allColors.includes(hex)) {
+                  selectedColor.value = hex;
+                } else {
+                  selectedColor.value = null;
+                }
+              } else {
+                selectedColor.value = null;
+              }
+            } catch (e) {
+              selectedColor.value = null;
+            }
+          }
+        };
+
+        function onContentEditableInput(e) { editForm.value.letraConAcordes = e.target.innerHTML; }
+
+        function handleKeydown(e) {
+          if (e.ctrlKey || e.metaKey) {
+            if (e.key === 'z' || e.key === 'Z') {
+              e.preventDefault();
+              if (e.shiftKey) redo();
+              else undo();
+            } else if (e.key === 'y' || e.key === 'Y') {
+              e.preventDefault();
+              redo();
+            } else if (e.key === 'b' || e.key === 'B') {
+              e.preventDefault();
+              aplicarNegrita();
+            }
+          }
+        }
+
+        function handlePaste(e) {
+          e.preventDefault();
+          const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+          document.execCommand('insertText', false, text);
+        }
+
+        function abrirModalTonosCantante() {
+          nuevoCantanteNombre.value = globalActiveSinger.value || '';
+          nuevoCantanteTono.value = currentSongKey.value || 'C';
+          showSingerModal.value = true;
+        }
+
+        async function guardarTonoCantante() {
+          if (!nuevoCantanteNombre.value || !activeSong.value) return;
+          const singerUpper = nuevoCantanteNombre.value.trim().toUpperCase();
+          const tonoUpper = normalizeKey(nuevoCantanteTono.value);
+          
+          if (!activeSong.value.tonosCantantes) activeSong.value.tonosCantantes = {};
+          activeSong.value.tonosCantantes[singerUpper] = tonoUpper;
+          
+          const sIdx = songs.value.findIndex(s => String(s.id) === String(activeSong.value.id));
+          if (sIdx !== -1) {
+            songs.value[sIdx].tonosCantantes = activeSong.value.tonosCantantes;
+            safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
+            syncing.value = true;
+            try {
+              await runGas('saveSongData', songs.value[sIdx], activeSong.value.id);
+            } catch(e) {}
+            syncing.value = false;
+          }
+          nuevoCantanteNombre.value = '';
+        }
+
+        function aplicarTonoCantante(tono) {
+          currentSongKey.value = normalizeKey(tono);
+          showSingerModal.value = false;
+        }
+
+        async function eliminarTonoCantante(cantante) {
+          if (!activeSong.value || !activeSong.value.tonosCantantes) return;
+          delete activeSong.value.tonosCantantes[cantante.toUpperCase()];
+          
+          const sIdx = songs.value.findIndex(s => String(s.id) === String(activeSong.value.id));
+          if (sIdx !== -1) {
+            songs.value[sIdx].tonosCantantes = activeSong.value.tonosCantantes;
+            safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
+            syncing.value = true;
+            try {
+              await runGas('saveSongData', songs.value[sIdx], activeSong.value.id);
+            } catch(e) {}
+            syncing.value = false;
+          }
+        }
+
+        return {
+          isLoggedIn, userRole, adminPassword, realAdminPassword, isCheckingPass, loginError,
+          showChords, songs, syncing, isLoading, currentView, activeContextMode, activeGenero,
+          activeRitmo, activeRepertorio, searchTerm, repSearchTerm, useSpanishNomenclatura,
+          globalActiveSinger, activeSong, currentSongKey, fontSize, songFontSizes, isFullscreen,
+          isAppFullscreen, keepFullscreen, isMobile, showSingerModal, showDeleteModal,
+          nuevoCantanteNombre, nuevoCantanteTono, singerSelectModal, repertorios,
+          songSingerOverrides, customRitmoOrder, editingSongId, editForm, editorTextarea,
+          visorScroll, selectedColor, isBoldActive, allColors, undoStack, redoStack,
+          chromaticsEN, chordMapToES, chordMapToEN, login, logout, resetNavegacion, irA,
+          getParentView, retroceder, recargarDatos, procesarSincronizacion, toggleChords,
+          cantantesDisponibles, listaGeneros, allRitmos, listaRitmosDelGenero,
+          songsByActiveGeneroAndRitmo, filteredSongs, filteredAvailableForRep, singerKeysList,
+          currentContextList, activeSongIndexInContext, prevSongData, nextSongData,
+          contarCancionesPorGenero, contarCancionesPorRitmo, onReorderEnd,
+          guardarRepertoriosEnNube, agregarCancionARepertorio, removerCancionDeRepertorio,
+          translateChord, toggleNomenclatura, normalizeKey, getValidSongId, getSongTitle,
+          getSongKeyAndModality, isRepertoryContext, getSongSinger, getSingerKeyDisplay,
+          getDisplayKeyAndModality, getSongKeyForContext, openSingerSelect, selectSingerOption,
+          transponerAcorde, calcularSemitonos, isStructureToken, isChord, transponerTexto,
+          renderedChordChart, effectiveFontSize, computedLineHeight, playSong, playFromSearch,
+          playFromGenre, playFromRepertory, navegarCancionContexto, transponer, resetTono,
+          ajustarZoom, resetAutoZoom, toggleFullscreen, selectGenero, selectRitmo,
+          abrirRepertorio, iniciarPresentacionSetlist, abrirCreador, abrirEditarCancionActual,
+          guardarCancion, eliminarCancion, confirmarEliminarCancion, saveEditorState, undo,
+          redo, aplicarNegrita, applyColor, updateEditorFormattingState, onContentEditableInput,
+          handleKeydown, handlePaste, abrirModalTonosCantante, guardarTonoCantante,
+          aplicarTonoCantante, eliminarTonoCantante
+        };
+      }
+    });
+
+    app.directive('sortable', {
+      mounted(el, binding) {
+        if (typeof Sortable !== 'undefined') {
+          Sortable.create(el, binding.value || {});
+        }
+      }
+    });
+
+    app.mount('#app');
+  </script>
+
+  <!-- REGISTRO AUTOMÁTICO DE SERVICE WORKER PARA MODO PWA OFFLINE -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Service Worker de Atril activo'))
+          .catch(err => console.error('Error al registrar Service Worker:', err));
+      });
+    }
+  </script>
+</body>
+</html>
