@@ -668,12 +668,14 @@
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = html;
 
+      // 1. Convertir <strong> a <b>
       tempDiv.querySelectorAll('strong').forEach(s => {
         const b = document.createElement('b');
         b.innerHTML = s.innerHTML;
         s.parentNode.replaceChild(b, s);
       });
 
+      // 2. Normalizar <span> con estilo de color o peso a <font color="..."> y <b>
       const spans = Array.from(tempDiv.querySelectorAll('span')).reverse();
       spans.forEach(span => {
         const color = span.style.color;
@@ -697,32 +699,47 @@
         span.parentNode.removeChild(span);
       });
 
+      // 3. Convertir etiquetas <br> a caracteres de salto de línea
+      tempDiv.querySelectorAll('br').forEach(br => {
+        br.parentNode.replaceChild(document.createTextNode('\n'), br);
+      });
+
+      // 4. Convertir elementos de bloque (div, p) a saltos de línea de forma precisa
       tempDiv.querySelectorAll('div, p').forEach(block => {
-        if (block.innerHTML === '<br>' || block.innerHTML === '<br/>') {
-          block.innerHTML = '\n';
-        } else {
-          block.insertAdjacentHTML('beforeend', '\n');
+        const nl = document.createTextNode('\n');
+        block.parentNode.insertBefore(nl, block.nextSibling);
+        while (block.firstChild) {
+          block.parentNode.insertBefore(block.firstChild, block);
         }
+        block.parentNode.removeChild(block);
       });
 
       let raw = tempDiv.innerHTML;
 
-      raw = raw.replace(/<br\s*\/?>/gi, '\n');
-
+      // Limpieza de entidades e HTML basura
       raw = raw
-        .replace(/<\/?div[^>]*>/gi, '')
-        .replace(/<\/?p[^>]*>/gi, '')
         .replace(/<\/?o:p[^>]*>/gi, '')
         .replace(/&nbsp;/gi, ' ');
 
-      raw = raw
-        .replace(/<font[^>]*>([\s]*?)<\/font>/gi, '$1')
-        .replace(/<b>([\s]*?)<\/b>/gi, '$1')
-        .replace(/\r\n/g, '\n');
-
+      // Eliminar etiquetas de fuentes con colores por defecto
       raw = raw.replace(/<font color="(?:#e2e8f0|#ffffff|rgb\(226, 232, 240\)|rgb\(255, 255, 255\))">([\s\S]*?)<\/font>/gi, '$1');
 
-      return raw;
+      // 5. Separar línea por línea y auto-cerrar etiquetas sin cerrar en CADA LÍNEA INDEPENDIENTEMENTE
+      const rawLines = raw.split(/\r?\n/);
+      const cleanLines = rawLines.map(line => {
+        if (!line.trim()) return '';
+
+        const lineDiv = document.createElement('div');
+        lineDiv.innerHTML = line;
+        
+        let cleanLine = lineDiv.innerHTML
+          .replace(/<font[^>]*>\s*<\/font>/gi, '')
+          .replace(/<b>\s*<\/b>/gi, '');
+
+        return cleanLine;
+      });
+
+      return cleanLines.join('\n').replace(/\n+$/, '');
     }
 
     function formatForEditor(content) {
@@ -800,22 +817,19 @@
           'DO': 'C', 'RE': 'D', 'MI': 'E', 'FA': 'F', 'SOL': 'G', 'LA': 'A', 'SI': 'B'
         };
 
-        async function login(role) {
+        function login(role) {
           if (role === 'admin') {
             const inputPass = adminPassword.value.trim();
             isCheckingPass.value = true;
             loginError.value = '';
             if (navigator.onLine) {
-              try {
-                const freshData = await runGas('getInitialData', true);
+              runGas('getInitialData', true).then(freshData => {
                 if (freshData && freshData.adminPassword !== undefined && freshData.adminPassword !== null && String(freshData.adminPassword).trim() !== '') {
                   const remotePass = String(freshData.adminPassword).trim();
                   realAdminPassword.value = remotePass;
                   safeSetLocal('atril_admin_password', remotePass);
                 }
-              } catch (e) {
-                console.error("Error al consultar la contraseña en la nube:", e);
-              }
+              }).catch(e => console.error("Error al consultar contraseña:", e));
             }
             const expectedPass = realAdminPassword.value.trim();
             isCheckingPass.value = false;
@@ -844,9 +858,11 @@
           isLoggedIn.value = false;
           userRole.value = '';
           adminPassword.value = '';
-          keepFullscreen.value = false;
-          isAppFullscreen.value = false;
-          isFullscreen.value = false;
+          currentView.value = 'generos';
+          if (!keepFullscreen.value) {
+            isAppFullscreen.value = false;
+            isFullscreen.value = false;
+          }
           if (document.fullscreenElement && document.exitFullscreen) {
             document.exitFullscreen().catch(() => {});
           }
@@ -911,15 +927,12 @@
             logout();
             return;
           }
-          if (window.history.state && window.history.state.view && window.history.state.view !== currentView.value) {
-            window.history.back();
+
+          const parent = getParentView(currentView.value);
+          if (parent === 'login') {
+            logout();
           } else {
-            const parent = getParentView(currentView.value);
-            if (parent === 'login') {
-              logout();
-            } else {
-              irA(parent, true);
-            }
+            irA(parent, true);
           }
         }
 
@@ -970,7 +983,7 @@
               safeSetLocal('atril_offline_queue', '[]');
             }
           }
-          await recargarDatos(true);
+          recargarDatos(true);
         }
 
         watch(visorScroll, (el) => {
@@ -1031,20 +1044,39 @@
             if (singerSelectModal.value.isOpen) { singerSelectModal.value.isOpen = false; return; }
             
             if (event.state && event.state.view) {
-              currentView.value = event.state.view;
+              if (event.state.view === 'login') {
+                logout();
+              } else {
+                currentView.value = event.state.view;
+              }
             } else {
-              currentView.value = isLoggedIn.value ? 'generos' : 'login';
+              if (isLoggedIn.value) {
+                if (currentView.value === 'generos') {
+                  logout();
+                } else {
+                  currentView.value = getParentView(currentView.value);
+                }
+              } else {
+                logout();
+              }
             }
           });
           window.addEventListener('resize', () => { isMobile.value = window.innerWidth < 640; });
           window.addEventListener('online', () => { procesarSincronizacion(); });
           document.addEventListener('fullscreenchange', () => {
             const nativeFull = !!document.fullscreenElement;
-            if (!nativeFull) {
-              if (!isLoggedIn.value || currentView.value === 'generos') {
-                keepFullscreen.value = false; isAppFullscreen.value = false; isFullscreen.value = false;
-              } else if (keepFullscreen.value) { isAppFullscreen.value = true;
-              } else { isAppFullscreen.value = false; isFullscreen.value = false; }
+            if (nativeFull) {
+              isFullscreen.value = true;
+              keepFullscreen.value = true;
+              isAppFullscreen.value = true;
+            } else {
+              isFullscreen.value = false;
+              if (keepFullscreen.value && isLoggedIn.value) {
+                isAppFullscreen.value = true;
+              } else {
+                isAppFullscreen.value = false;
+                keepFullscreen.value = false;
+              }
             }
           });
           
@@ -1063,7 +1095,7 @@
           }
           
           if (navigator.onLine) {
-            await procesarSincronizacion();
+            procesarSincronizacion();
           } else {
             isLoading.value = false;
           }
@@ -1206,7 +1238,7 @@
           return songs.value.filter(s => s && s.ritmo && s.ritmo.toUpperCase() === ritmo.toUpperCase() && s.genero && s.genero.toUpperCase() === activeGenero.value.toUpperCase()).length;
         }
 
-        async function onReorderEnd(evt, context) {
+        function onReorderEnd(evt, context) {
           const { oldIndex, newIndex } = evt;
           if (oldIndex === newIndex || oldIndex === undefined || newIndex === undefined) return;
           
@@ -1214,7 +1246,7 @@
             const list = repertorios.value[activeRepertorio.value].canciones;
             const moved = list.splice(oldIndex, 1)[0];
             list.splice(newIndex, 0, moved);
-            await guardarRepertoriosEnNube();
+            guardarRepertoriosEnNube();
           } else if (context === 'lista_genero' || context === 'busqueda') {
             const currentSublist = context === 'lista_genero' ? songsByActiveGeneroAndRitmo.value : filteredSongs.value;
             const movedItem = currentSublist[oldIndex];
@@ -1229,8 +1261,7 @@
                 safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
                 const reorderedIds = songs.value.map(s => s.id);
                 syncing.value = true;
-                await runGas('saveSongsOrder', reorderedIds);
-                syncing.value = false;
+                runGas('saveSongsOrder', reorderedIds).finally(() => { syncing.value = false; });
               }
             }
           } else if (context === 'ritmos') {
@@ -1242,16 +1273,14 @@
             customRitmoOrder.value = [...currentOrder, ...arr];
             safeSetLocal('atril_ritmo_order', JSON.stringify(customRitmoOrder.value));
             syncing.value = true;
-            try { await runGas('saveRitmoOrder', customRitmoOrder.value); } catch(e) {}
-            syncing.value = false;
+            runGas('saveRitmoOrder', customRitmoOrder.value).finally(() => { syncing.value = false; });
           }
         }
 
-        async function guardarRepertoriosEnNube() {
-          syncing.value = true;
-          await runGas('saveRepertorios', repertorios.value);
-          syncing.value = false;
+        function guardarRepertoriosEnNube() {
           safeSetLocal('atril_repertorios_data', JSON.stringify(repertorios.value));
+          syncing.value = true;
+          runGas('saveRepertorios', repertorios.value).finally(() => { syncing.value = false; });
         }
 
         function agregarCancionARepertorio(songId) {
@@ -1524,7 +1553,9 @@
           } else {
             currentSongKey.value = normalizeKey(song.tonoOriginal);
           }
-          irA('visor');
+          if (currentView.value !== 'visor') {
+            irA('visor');
+          }
         }
 
         function playFromSearch(index) {
@@ -1593,23 +1624,27 @@
         }
 
         function toggleFullscreen() {
-          if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().then(() => {
-              isFullscreen.value = true;
+          if (!document.fullscreenElement && !isAppFullscreen.value) {
+            if (document.documentElement.requestFullscreen) {
+              document.documentElement.requestFullscreen().then(() => {
+                isFullscreen.value = true;
+                keepFullscreen.value = true;
+                isAppFullscreen.value = true;
+              }).catch(() => {
+                isAppFullscreen.value = true;
+                keepFullscreen.value = true;
+              });
+            } else {
+              isAppFullscreen.value = true;
               keepFullscreen.value = true;
-            }).catch(() => {
-              isAppFullscreen.value = !isAppFullscreen.value;
-              keepFullscreen.value = isAppFullscreen.value;
-            });
+            }
           } else {
-            document.exitFullscreen().then(() => {
-              isFullscreen.value = false;
-              keepFullscreen.value = false;
-              isAppFullscreen.value = false;
-            }).catch(() => {
-              isAppFullscreen.value = false;
-              keepFullscreen.value = false;
-            });
+            keepFullscreen.value = false;
+            isAppFullscreen.value = false;
+            isFullscreen.value = false;
+            if (document.fullscreenElement && document.exitFullscreen) {
+              document.exitFullscreen().catch(() => {});
+            }
           }
         }
 
@@ -1670,7 +1705,7 @@
           });
         }
 
-        async function guardarCancion() {
+        function guardarCancion() {
           if (!editForm.value.titulo) return alert('El título es obligatorio.');
           
           let rawHtml = editorTextarea.value ? editorTextarea.value.innerHTML : (editForm.value.letraConAcordes || '');
@@ -1702,15 +1737,6 @@
             tonosCantantes: existingTonos
           };
 
-          syncing.value = true;
-          try {
-            await runGas('saveSongData', songObj, songId);
-          } catch(e) {
-            console.error("Error al guardar en la nube:", e);
-          } finally {
-            syncing.value = false;
-          }
-
           const existingIdx = songs.value.findIndex(s => String(s.id) === songId);
           if (existingIdx !== -1) {
             songs.value[existingIdx] = songObj;
@@ -1724,26 +1750,25 @@
           editingSongId.value = songId;
           
           irA('visor', true);
+
+          syncing.value = true;
+          runGas('saveSongData', songObj, songId).finally(() => { syncing.value = false; });
         }
 
         function eliminarCancion() {
           showDeleteModal.value = true;
         }
 
-        async function confirmarEliminarCancion() {
+        function confirmarEliminarCancion() {
           const songId = editingSongId.value || (editForm.value ? editForm.value.id : null);
           if (songId) {
             songs.value = songs.value.filter(s => String(s.id) !== String(songId));
             safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
-            
             showDeleteModal.value = false;
+            irA('generos', true);
+
             syncing.value = true;
-            try {
-              await runGas('deleteSong', String(songId));
-            } catch(e) {}
-            syncing.value = false;
-            
-            irA('generos');
+            runGas('deleteSong', String(songId)).finally(() => { syncing.value = false; });
           }
         }
 
@@ -1846,6 +1871,9 @@
         function onContentEditableInput(e) { editForm.value.letraConAcordes = e.target.innerHTML; }
 
         function handleKeydown(e) {
+          if (e.key === 'Enter') {
+            selectedColor.value = null;
+          }
           if (e.ctrlKey || e.metaKey) {
             if (e.key === 'z' || e.key === 'Z') {
               e.preventDefault();
@@ -1873,7 +1901,7 @@
           showSingerModal.value = true;
         }
 
-        async function guardarTonoCantante() {
+        function guardarTonoCantante() {
           if (!nuevoCantanteNombre.value || !activeSong.value) return;
           const singerUpper = nuevoCantanteNombre.value.trim().toUpperCase();
           const tonoUpper = normalizeKey(nuevoCantanteTono.value);
@@ -1886,10 +1914,7 @@
             songs.value[sIdx].tonosCantantes = activeSong.value.tonosCantantes;
             safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
             syncing.value = true;
-            try {
-              await runGas('saveSongData', songs.value[sIdx], activeSong.value.id);
-            } catch(e) {}
-            syncing.value = false;
+            runGas('saveSongData', songs.value[sIdx], activeSong.value.id).finally(() => { syncing.value = false; });
           }
           nuevoCantanteNombre.value = '';
         }
@@ -1899,7 +1924,7 @@
           showSingerModal.value = false;
         }
 
-        async function eliminarTonoCantante(cantante) {
+        function eliminarTonoCantante(cantante) {
           if (!activeSong.value || !activeSong.value.tonosCantantes) return;
           delete activeSong.value.tonosCantantes[cantante.toUpperCase()];
           
@@ -1908,10 +1933,7 @@
             songs.value[sIdx].tonosCantantes = activeSong.value.tonosCantantes;
             safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
             syncing.value = true;
-            try {
-              await runGas('saveSongData', songs.value[sIdx], activeSong.value.id);
-            } catch(e) {}
-            syncing.value = false;
+            runGas('saveSongData', songs.value[sIdx], activeSong.value.id).finally(() => { syncing.value = false; });
           }
         }
 
