@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Atril Profesional de Músicos</title>
-<meta name="apple-mobile-web-app-capable" content="yes">
+  
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Atril Virtual">
   <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3844/3844720.png">
@@ -675,14 +676,12 @@
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = html;
 
-      // 1. Convertir <strong> a <b>
       tempDiv.querySelectorAll('strong').forEach(s => {
         const b = document.createElement('b');
         b.innerHTML = s.innerHTML;
         s.parentNode.replaceChild(b, s);
       });
 
-      // 2. Normalizar <span> con estilo de color o peso a <font color="..."> y <b>
       const spans = Array.from(tempDiv.querySelectorAll('span')).reverse();
       spans.forEach(span => {
         const color = span.style.color;
@@ -706,12 +705,10 @@
         span.parentNode.removeChild(span);
       });
 
-      // 3. Convertir etiquetas <br> a caracteres de salto de línea
       tempDiv.querySelectorAll('br').forEach(br => {
         br.parentNode.replaceChild(document.createTextNode('\n'), br);
       });
 
-      // 4. Convertir elementos de bloque (div, p) a saltos de línea de forma precisa
       tempDiv.querySelectorAll('div, p').forEach(block => {
         const nl = document.createTextNode('\n');
         block.parentNode.insertBefore(nl, block.nextSibling);
@@ -723,15 +720,12 @@
 
       let raw = tempDiv.innerHTML;
 
-      // Limpieza de entidades e HTML basura
       raw = raw
         .replace(/<\/?o:p[^>]*>/gi, '')
         .replace(/&nbsp;/gi, ' ');
 
-      // Eliminar etiquetas de fuentes con colores por defecto
       raw = raw.replace(/<font color="(?:#e2e8f0|#ffffff|rgb\(226, 232, 240\)|rgb\(255, 255, 255\))">([\s\S]*?)<\/font>/gi, '$1');
 
-      // 5. Separar línea por línea y auto-cerrar etiquetas sin cerrar en CADA LÍNEA INDEPENDIENTEMENTE
       const rawLines = raw.split(/\r?\n/);
       const cleanLines = rawLines.map(line => {
         if (!line.trim()) return '';
