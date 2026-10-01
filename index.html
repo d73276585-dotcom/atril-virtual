@@ -837,47 +837,63 @@
         async function loginPin() {
           const input = String(pinIngresado.value).trim();
           if (!input) return;
-  
+          
           isCheckingPass.value = true;
           loginError.value = '';
 
           try {
-            // 1. Si no hay usuarios en memoria local, forzamos recarga desde la nube
-            if (!usuarios.value || usuarios.value.length === 0) {
-            await recargarDatos(true);
+            // 1. Intentar validar rápidamente en la memoria local (si ya descargó)
+            let user = usuarios.value ? usuarios.value.find(u => String(u.pin).trim() === input) : null;
+
+            // 2. Si no está en memoria local, consultar DIRECTAMENTE al servidor (Google Apps Script)
+            if (!user) {
+              const res = await runGas('login', { clave: input });
+              
+              if (res && res.status === 'SUCCESS') {
+                userRole.value = res.rol;
+                currentUserName.value = res.nombre || 'Músico';
+                isLoggedIn.value = true;
+                
+                if (res.canciones) songs.value = res.canciones;
+                if (res.repertorios) repertorios.value = res.repertorios;
+
+                safeSetLocal('atril_saved_pin', input);
+                safeSetLocal('atril_current_user', res.nombre || 'Músico');
+                
+                // Carga la lista completa en segundo plano para uso offline futuro
+                recargarDatos(true);
+
+                currentView.value = 'generos';
+                window.history.replaceState({ view: 'login' }, '');
+                window.history.pushState({ view: 'generos' }, '');
+                return;
+              } else {
+                loginError.value = (res && res.message) ? res.message : 'PIN incorrecto o inactivo';
+                pinIngresado.value = '';
+                return;
+              }
+            }
+
+            // 3. Si se encontró en la memoria local
+            if (user) {
+              userRole.value = user.rol;
+              currentUserName.value = user.nombre;
+              isLoggedIn.value = true;
+              
+              safeSetLocal('atril_saved_pin', input);
+              safeSetLocal('atril_current_user', user.nombre);
+              
+              currentView.value = 'generos';
+              window.history.replaceState({ view: 'login' }, '');
+              window.history.pushState({ view: 'generos' }, '');
+            }
+          } catch (err) {
+            console.error("Error al verificar PIN:", err);
+            loginError.value = 'Error de conexión con el servidor';
+          } finally {
+            isCheckingPass.value = false;
           }
-
-          // 2. Buscamos el PIN
-          let user = usuarios.value.find(u => String(u.pin).trim() === input);
-
-          // 3. Si no lo encuentra a la primera, volvemos a sincronizar con Google Sheets
-          if (!user) {
-             await recargarDatos(true);
-             user = usuarios.value.find(u => String(u.pin).trim() === input);
-          }
-
-         if (user) {
-           userRole.value = user.rol;
-           currentUserName.value = user.nombre;
-           isLoggedIn.value = true;
-      
-          safeSetLocal('atril_saved_pin', input);
-          safeSetLocal('atril_current_user', user.nombre);
-      
-          currentView.value = 'generos';
-          window.history.replaceState({ view: 'login' }, '');
-          window.history.pushState({ view: 'generos' }, '');
-         } else {
-           loginError.value = 'PIN incorrecto o inactivo';
-           pinIngresado.value = '';
-         }
-        } catch (err) {
-          console.error("Error al verificar PIN:", err);
-         loginError.value = 'Error de conexión con la base de datos';
-       } finally {
-         isCheckingPass.value = false;
-       }
-      }
+        }
 
         function logout() {
           isLoggedIn.value = false;
