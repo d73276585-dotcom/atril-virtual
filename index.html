@@ -834,34 +834,50 @@
           'DO': 'C', 'RE': 'D', 'MI': 'E', 'FA': 'F', 'SOL': 'G', 'LA': 'A', 'SI': 'B'
         };
 
-        function loginPin() {
-          const input = pinIngresado.value.trim();
+        async function loginPin() {
+          const input = String(pinIngresado.value).trim();
           if (!input) return;
-          
+  
           isCheckingPass.value = true;
           loginError.value = '';
 
-          // Verifica contra la base de datos descargada (funciona offline)
-          const user = usuarios.value.find(u => u.pin === input);
-
-          if (user) {
-            userRole.value = user.rol;
-            currentUserName.value = user.nombre;
-            isLoggedIn.value = true;
-            
-            // Guarda los datos en el dispositivo para no volver a pedir el PIN
-            safeSetLocal('atril_saved_pin', input);
-            safeSetLocal('atril_current_user', user.nombre);
-            
-            currentView.value = 'generos';
-            window.history.replaceState({ view: 'login' }, '');
-            window.history.pushState({ view: 'generos' }, '');
-          } else {
-            loginError.value = 'PIN incorrecto o inactivo';
-            pinIngresado.value = '';
+          try {
+            // 1. Si no hay usuarios en memoria local, forzamos recarga desde la nube
+            if (!usuarios.value || usuarios.value.length === 0) {
+            await recargarDatos(true);
           }
-          isCheckingPass.value = false;
-        }
+
+          // 2. Buscamos el PIN
+          let user = usuarios.value.find(u => String(u.pin).trim() === input);
+
+          // 3. Si no lo encuentra a la primera, volvemos a sincronizar con Google Sheets
+          if (!user) {
+             await recargarDatos(true);
+             user = usuarios.value.find(u => String(u.pin).trim() === input);
+          }
+
+         if (user) {
+           userRole.value = user.rol;
+           currentUserName.value = user.nombre;
+           isLoggedIn.value = true;
+      
+          safeSetLocal('atril_saved_pin', input);
+          safeSetLocal('atril_current_user', user.nombre);
+      
+          currentView.value = 'generos';
+          window.history.replaceState({ view: 'login' }, '');
+          window.history.pushState({ view: 'generos' }, '');
+         } else {
+           loginError.value = 'PIN incorrecto o inactivo';
+           pinIngresado.value = '';
+         }
+        } catch (err) {
+          console.error("Error al verificar PIN:", err);
+         loginError.value = 'Error de conexión con la base de datos';
+       } finally {
+         isCheckingPass.value = false;
+       }
+      }
 
         function logout() {
           isLoggedIn.value = false;
