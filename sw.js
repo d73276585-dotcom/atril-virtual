@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atril-app-v15';
+const CACHE_NAME = 'atril-app-v16'; // Cambiado a v16 para forzar la limpieza de caché
 
 const INITIAL_ASSETS = [
   './',
@@ -41,7 +41,13 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  if (event.request.url.includes('script.google.com')) return;
+
+  const url = event.request.url;
+
+  // ✅ NUNCA guardar en caché las consultas a Google Apps Script ni sus dominios de respuesta
+  if (url.includes('script.google.com') || url.includes('googleusercontent.com')) {
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
@@ -49,9 +55,10 @@ self.addEventListener('fetch', (event) => {
         return cachedResponse;
       }
       return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse) return networkResponse;
+        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+          return networkResponse;
+        }
 
-        // Guarda automáticamente en la memoria cualquier archivo de fuente o ícono (.woff2, .ttf, .css)
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache);
