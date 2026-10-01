@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atril-app-v14';
+const CACHE_NAME = 'atril-app-v15';
 
 const INITIAL_ASSETS = [
   './',
@@ -49,13 +49,14 @@ self.addEventListener('fetch', (event) => {
         return cachedResponse;
       }
       return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || (networkResponse.status !== 200 && networkResponse.type !== 'opaque')) {
-          return networkResponse;
-        }
+        if (!networkResponse) return networkResponse;
+
+        // Guarda automáticamente en la memoria cualquier archivo de fuente o ícono (.woff2, .ttf, .css)
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache);
         });
+
         return networkResponse;
       }).catch(() => {
         if (event.request.mode === 'navigate') {
