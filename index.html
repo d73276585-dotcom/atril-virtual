@@ -810,10 +810,12 @@
         });
         const songSingerOverrides = ref({});
         const customRitmoOrder = ref([]);
+        const ritmosOrder = ref([]);
         try {
           const savedOrder = safeGetLocal('atril_ritmo_order');
           if (savedOrder) customRitmoOrder.value = JSON.parse(savedOrder);
         } catch(e) {}
+        
         const editingSongId = ref(null);
         const editForm = ref({ id: null, titulo: '', tonoOriginal: '', modalidad: '', genero: '', ritmo: '' });
         const editorTextarea = ref(null);
@@ -834,47 +836,17 @@
           'DO': 'C', 'RE': 'D', 'MI': 'E', 'FA': 'F', 'SOL': 'G', 'LA': 'A', 'SI': 'B'
         };
 
-        async function loginPin() {
+       async function loginPin() {
           const input = String(pinIngresado.value).trim();
           if (!input) return;
-          
+
           isCheckingPass.value = true;
           loginError.value = '';
-
           try {
-            // 1. Intentar validar rápidamente en la memoria local (si ya descargó)
-            let user = usuarios.value ? usuarios.value.find(u => String(u.pin).trim() === input) : null;
-
-            // 2. Si no está en memoria local, consultar DIRECTAMENTE al servidor (Google Apps Script)
-            if (!user) {
-              const res = await runGas('login', { clave: input });
-              
-              if (res && res.status === 'SUCCESS') {
-                userRole.value = res.rol;
-                currentUserName.value = res.nombre || 'Músico';
-                isLoggedIn.value = true;
-                
-                if (res.canciones) songs.value = res.canciones;
-                if (res.repertorios) repertorios.value = res.repertorios;
-
-                safeSetLocal('atril_saved_pin', input);
-                safeSetLocal('atril_current_user', res.nombre || 'Músico');
-                
-                // Carga la lista completa en segundo plano para uso offline futuro
-                recargarDatos(true);
-
-                currentView.value = 'generos';
-                window.history.replaceState({ view: 'login' }, '');
-                window.history.pushState({ view: 'generos' }, '');
-                return;
-              } else {
-                loginError.value = (res && res.message) ? res.message : 'PIN incorrecto o inactivo';
-                pinIngresado.value = '';
-                return;
-              }
+            if (!usuarios.value || usuarios.value.length === 0) {
+              await recargarDatos(false);
             }
-
-            // 3. Si se encontró en la memoria local
+            let user = usuarios.value ? usuarios.value.find(u => String(u.pin).trim() === input) : null;
             if (user) {
               userRole.value = user.rol;
               currentUserName.value = user.nombre;
@@ -883,13 +855,20 @@
               safeSetLocal('atril_saved_pin', input);
               safeSetLocal('atril_current_user', user.nombre);
               
+              if (!songs.value || songs.value.length === 0) {
+                await recargarDatos(false);
+              }
               currentView.value = 'generos';
               window.history.replaceState({ view: 'login' }, '');
               window.history.pushState({ view: 'generos' }, '');
+            } else {
+              loginError.value = 'PIN incorrecto o inactivo';
+              pinIngresado.value = '';
             }
           } catch (err) {
             console.error("Error al verificar PIN:", err);
             loginError.value = 'Error de conexión con el servidor';
+            pinIngresado.value = '';
           } finally {
             isCheckingPass.value = false;
           }
@@ -986,42 +965,46 @@
           }
         }
 
-        async function recargarDatos(esSilencioso = false) {
-          if (typeof esSilencioso !== 'boolean') esSilencioso = false;
-          if (!esSilencioso || !songs.value || songs.value.length === 0) syncing.value = true;
-          try {
-            const data = await runGas('getInitialData', !esSilencioso);
-            if (data) {
-              // ... (mantén las actualizaciones de songs, repertorios y ritmosOrder) ...
+         async function recargarDatos(esSilencioso = false) {
+           if (typeof esSilencioso !== 'boolean') esSilencioso = false;
+           if (!esSilencioso || !songs.value || songs.value.length === 0) syncing.value = true;
+  
+           try {
+              const data = await runGas('getInitialData', !esSilencioso);
+              console.log("Datos desde Google Sheets:", data);
+              if (data) {
+                // 1. Asignar canciones y repertorios para quitar los "0 temas"
+                if (data.songs || data.canciones) songs.value = data.songs || data.canciones;
+                if (data.repertorios) repertorios.value = data.repertorios;
+                if (data.ritmosOrder) ritmosOrder.value = data.ritmosOrder;
 
-              if (data.usuarios) {
-                usuarios.value = data.usuarios;
-                safeSetLocal('atril_usuarios_data', JSON.stringify(data.usuarios));
-                
-                // Si está logueado, verifica que su PIN siga existiendo en la nube
-                if (isLoggedIn.value) {
-                  const currentPin = safeGetLocal('atril_saved_pin');
-                  const userStillValid = data.usuarios.find(u => u.pin === currentPin);
-                  if (!userStillValid) {
-                     // El administrador eliminó este PIN, revocar acceso inmediatamente
-                     logout();
-                     loginError.value = "Tu acceso ha sido revocado o el PIN ya no es válido.";
-                  } else {
-                     // Actualiza su rol/nombre en vivo por si el admin los cambió
-                     userRole.value = userStillValid.rol;
-                     currentUserName.value = userStillValid.nombre;
-                     safeSetLocal('atril_current_user', userStillValid.nombre);
-                  }
-                }
-              }
+                // 2. Control de usuarios y PIN
+                if (data.usuarios) {
+                   usuarios.value = data.usuarios;
+                   safeSetLocal('atril_usuarios_data', JSON.stringify(data.usuarios));
+        
+                   if (isLoggedIn.value) {
+                      const currentPin = safeGetLocal('atril_saved_pin');
+                      const userStillValid = data.usuarios.find(u => String(u.pin).trim() === String(currentPin).trim());
+          
+                      if (!userStillValid) {
+                        logout();
+                        loginError.value = "Tu acceso ha sido revocado o el PIN ya no es válido.";
+                      } else {
+                       userRole.value = userStillValid.rol;
+                       currentUserName.value = userStillValid.nombre;
+                       safeSetLocal('atril_current_user', userStillValid.nombre);
+                      }
+                    }
+                 }
+             }
+            } catch (err) {
+              console.error("Error al recargar:", err);
+            } finally {
+              syncing.value = false;
+              isLoading.value = false;
             }
-          } catch (err) {
-            console.error("Error al recargar:", err);
-          } finally {
-            syncing.value = false;
-            isLoading.value = false;
-          }
-        }
+         }
 
         async function procesarSincronizacion() {
           if (navigator.onLine) {
