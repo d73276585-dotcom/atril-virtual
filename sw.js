@@ -1,16 +1,31 @@
-const CACHE_NAME = 'atril-app-v12';
+const CACHE_NAME = 'atril-app-v14';
 
-// 1. Guardar únicamente los archivos locales en la instalación inicial
 const INITIAL_ASSETS = [
   './',
   './index.html',
-  './manifest.json'
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  'https://cdn.tailwindcss.com',
+  'https://unpkg.com/vue@3/dist/vue.global.js',
+  'https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
 ];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(INITIAL_ASSETS))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const url of INITIAL_ASSETS) {
+        try {
+          const req = new Request(url, { mode: 'no-cors' });
+          const res = await fetch(req);
+          await cache.put(url, res);
+        } catch (e) {
+          console.warn('[SW] No se pudo guardar:', url);
+        }
+      }
+    })
   );
 });
 
@@ -24,7 +39,6 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// 2. Interceptar y guardar dinámicamente todo lo que se cargue
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (event.request.url.includes('script.google.com')) return;
