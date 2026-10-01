@@ -837,66 +837,92 @@
         };
 
        async function loginPin() {
-          const input = String(pinIngresado.value).trim();
-          if (!input) return;
+         const input = String(pinIngresado.value).trim();
+         if (!input) return;
 
           isCheckingPass.value = true;
           loginError.value = '';
-          try {
+
+         try {
+           // 1. Si los usuarios no están cargados, intenta obtenerlos
             if (!usuarios.value || usuarios.value.length === 0) {
-              await recargarDatos(false);
-            }
-            let user = usuarios.value ? usuarios.value.find(u => String(u.pin).trim() === input) : null;
-            if (user) {
-              userRole.value = user.rol;
-              currentUserName.value = user.nombre;
-              isLoggedIn.value = true;
-              
-              safeSetLocal('atril_saved_pin', input);
-              safeSetLocal('atril_current_user', user.nombre);
-              
-              if (!songs.value || songs.value.length === 0) {
-                await recargarDatos(false);
-              }
-              currentView.value = 'generos';
-              window.history.replaceState({ view: 'login' }, '');
-              window.history.pushState({ view: 'generos' }, '');
-            } else {
-              loginError.value = 'PIN incorrecto o inactivo';
-              pinIngresado.value = '';
-            }
-          } catch (err) {
-            console.error("Error al verificar PIN:", err);
-            loginError.value = 'Error de conexión con el servidor';
-            pinIngresado.value = '';
-          } finally {
-            isCheckingPass.value = false;
-          }
-        }
-
-        function logout() {
-          isLoggedIn.value = false;
-          userRole.value = '';
-           adminPassword.value = '';
-           pinIngresado.value = ''; // Limpia el PIN activo
-
-           // Borra credenciales de la memoria local
-            localStorage.removeItem('atril_saved_pin');
-            localStorage.removeItem('atril_current_user');
-
-           currentView.value = 'generos';
-
-           if (!keepFullscreen.value) {
-             isAppFullscreen.value = false;
-             isFullscreen.value = false;
-            }
-
-           if (document.fullscreenElement && document.exitFullscreen) {
-             document.exitFullscreen().catch(() => {});
+             await recargarDatos(false);
+      
+              // Si sigue vacío después de recargar (por falta de red), intenta recuperar del almacenamiento local
+             if (!usuarios.value || usuarios.value.length === 0) {
+               const cachedUsers = safeGetLocal('atril_usuarios_data');
+               if (cachedUsers) usuarios.value = JSON.parse(cachedUsers);
+             }
            }
 
+            // 2. Buscar el usuario ingresado
+           let user = usuarios.value ? usuarios.value.find(u => String(u.pin).trim() === input) : null;
+
+            if (user) {
+             // ✅ Sesión Válida
+             userRole.value = user.rol;
+             currentUserName.value = user.nombre;
+             isLoggedIn.value = true;
+
+             // 💾 Guardar credenciales en el celular para autologin permanente
+             safeSetLocal('atril_saved_pin', input);
+             safeSetLocal('atril_current_user', user.nombre);
+
+             // Limpiar casilla de PIN por seguridad
+             pinIngresado.value = '';
+
+             // Si por alguna razón las canciones están vacías, las descarga
+             if (!songs.value || songs.value.length === 0) {
+               await recargarDatos(false);
+             }
+
+              // Redireccionar al menú principal de géneros
+             currentView.value = 'generos';
+             window.history.replaceState({ view: 'login' }, '');
+             window.history.pushState({ view: 'generos' }, '');
+           } else {
+             // ❌ PIN Incorrecto o no existe en Google Sheets
+             loginError.value = 'PIN incorrecto o inactivo';
+             pinIngresado.value = '';
+           }
+         } catch (err) {
+           console.error("Error al verificar PIN:", err);
+           loginError.value = 'Error de conexión con el servidor';
+           pinIngresado.value = '';
+         } finally {
+           isCheckingPass.value = false;
+         }
+       }
+
+       function logout() {
+         // 1. Desactivar estado de sesión activa
+         isLoggedIn.value = false;
+         userRole.value = '';
+         currentUserName.value = '';
+         adminPassword.value = '';
+         pinIngresado.value = '';
+         loginError.value = '';
+
+         // 2. Borrar las credenciales persistentes del celular
+         localStorage.removeItem('atril_saved_pin');
+         localStorage.removeItem('atril_current_user');
+
+         // 3. Regresar a la pantalla de Login
+         currentView.value = 'login';
+
+         // 4. Salir de pantalla completa si estaba activa
+         if (!keepFullscreen.value) {
+           isAppFullscreen.value = false;
+           isFullscreen.value = false;
+         }
+
+         if (document.fullscreenElement && document.exitFullscreen) {
+           document.exitFullscreen().catch(() => {});
+         }
+
+         // Restablecer el historial de navegación
           window.history.replaceState({ view: 'login' }, '');
-        }
+       }
 
         function resetNavegacion() {
           searchTerm.value = '';
@@ -968,41 +994,66 @@
          async function recargarDatos(esSilencioso = false) {
            if (typeof esSilencioso !== 'boolean') esSilencioso = false;
            if (!esSilencioso || !songs.value || songs.value.length === 0) syncing.value = true;
-  
-           try {
+
+            try {
               const data = await runGas('getInitialData', !esSilencioso);
               console.log("Datos desde Google Sheets:", data);
-              if (data) {
-                // 1. Asignar canciones y repertorios para quitar los "0 temas"
-                if (data.songs || data.canciones) songs.value = data.songs || data.canciones;
-                if (data.repertorios) repertorios.value = data.repertorios;
-                if (data.ritmosOrder) ritmosOrder.value = data.ritmosOrder;
 
-                // 2. Control de usuarios y PIN
-                if (data.usuarios) {
-                   usuarios.value = data.usuarios;
-                   safeSetLocal('atril_usuarios_data', JSON.stringify(data.usuarios));
-        
-                   if (isLoggedIn.value) {
-                      const currentPin = safeGetLocal('atril_saved_pin');
-                      const userStillValid = data.usuarios.find(u => String(u.pin).trim() === String(currentPin).trim());
-          
-                      if (!userStillValid) {
-                        logout();
-                        loginError.value = "Tu acceso ha sido revocado o el PIN ya no es válido.";
-                      } else {
-                       userRole.value = userStillValid.rol;
-                       currentUserName.value = userStillValid.nombre;
-                       safeSetLocal('atril_current_user', userStillValid.nombre);
-                      }
-                    }
+               if (data) {
+                 // 1. Asignar canciones, repertorios y orden de ritmos
+                 if (data.songs || data.canciones) {
+                 songs.value = data.songs || data.canciones;
+                 safeSetLocal('atril_songs_cache', JSON.stringify(songs.value));
+                }
+               if (data.repertorios) {
+                  repertorios.value = data.repertorios;
+                 safeSetLocal('atril_repertorios_cache', JSON.stringify(data.repertorios));
+               }
+                if (data.ritmosOrder) {
+                  ritmosOrder.value = data.ritmosOrder;
+                }
+
+                // 2. Control de usuarios, inicio automático y validación de PIN
+                if (data.usuarios && Array.isArray(data.usuarios)) {
+                 usuarios.value = data.usuarios;
+                 safeSetLocal('atril_usuarios_data', JSON.stringify(data.usuarios));
+
+                 const savedPin = safeGetLocal('atril_saved_pin');
+
+                 if (savedPin) {
+                    const userStillValid = data.usuarios.find(
+                     u => String(u.pin).trim() === String(savedPin).trim()
+                   );
+
+                   if (userStillValid) {
+                     // ✅ PIN válido: mantiene o activa la sesión automáticamente
+                     isLoggedIn.value = true;
+                     userRole.value = userStillValid.rol;
+                     currentUserName.value = userStillValid.nombre;
+                     safeSetLocal('atril_current_user', userStillValid.nombre);
+                   } else {
+                     // ❌ El PIN cambió o fue eliminado en Google Sheets
+                     logout();
+                     loginError.value = "Tu acceso ha sido revocado o el PIN ya no es válido.";
+                   }
                  }
+               }
              }
-            } catch (err) {
-              console.error("Error al recargar:", err);
-            } finally {
-              syncing.value = false;
-              isLoading.value = false;
+           } catch (err) {
+              console.error("Error al recargar datos de Google Sheets:", err);
+
+               // 3. Fallback Offline: Restaurar datos locales si falla la red
+               const cachedSongs = safeGetLocal('atril_songs_cache');
+               const cachedReps = safeGetLocal('atril_repertorios_cache');
+               const cachedUsers = safeGetLocal('atril_usuarios_data');
+
+              if (cachedSongs) songs.value = JSON.parse(cachedSongs);
+              if (cachedReps) repertorios.value = JSON.parse(cachedReps);
+              if (cachedUsers) usuarios.value = JSON.parse(cachedUsers);
+
+           } finally {
+             syncing.value = false;
+             isLoading.value = false;
             }
          }
 
