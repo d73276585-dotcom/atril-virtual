@@ -910,33 +910,24 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         }
 
         // ==========================================
-        // 2. ARRANQUE AUTOMÁTICO (onMounted)
+        // 2. ARRANQUE AUTOMÁTICO
         // ==========================================
         function inicializarApp() {
-          console.log("🎬 Inicializando aplicación...");
+          console.log("🎬 Inicializando aplicación desde memoria local...");
+  
+          // A. Restaura sesión y datos guardados en el celular
           restaurarSesionLocal();
-          recargarDatos(true);
+
+          // B. SOLO si NO hay ninguna canción guardada (primera instalación) descarga de la nube
+          if (!songs.value || songs.value.length === 0) {
+            console.log("📦 Base de datos vacía. Descargando datos por primera vez...");
+            recargarDatos(false);
+          } else {
+            // Si ya existen canciones guardadas, entra directo sin tocar internet
+            isLoading.value = false;
+            syncing.value = false;
+          }
         }
-
-        onMounted(() => {
-          // Ejecuta el arranque automático al montar el componente
-          inicializarApp();
-
-          // Controla que el botón de retroceso del navegador no te saque si estás logueado
-          window.addEventListener('popstate', (event) => {
-            const pinGuardado = safeGetLocal('atril_saved_pin');
-            if (event.state && event.state.view) {
-              if (event.state.view === 'login' && pinGuardado) {
-                currentView.value = 'generos';
-                window.history.replaceState({ view: 'generos' }, '');
-              } else {
-                currentView.value = event.state.view;
-              }
-            } else if (pinGuardado) {
-              currentView.value = 'generos';
-            }
-          });
-        });
 
         // ==========================================
         // 3. INICIO DE SESIÓN
@@ -1060,13 +1051,14 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
                   const args = Array.isArray(item.payload) ? item.payload : [item.payload];
                   await runGas(item.action, ...args);
                 } catch (e) {
-                  console.error("Error sincronizando:", e);
+                  console.error("Error sincronizando elemento:", e);
                 }
               }
               safeSetLocal('atril_offline_queue', '[]');
+              syncing.value = false;
             }
           }
-          recargarDatos(true);
+          // Se quitó recargarDatos(true) de aquí para no ralentizar el inicio
         }
 
         // ==========================================
@@ -1218,12 +1210,29 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
           el.addEventListener('touchcancel', handleTouchEnd, { passive: true });
         });
 
-        onMounted(async () => {
+        onMounted(() => {
+          // 1. Carga instantánea de sesión y canciones locales (0.1 segundos)
+          inicializarApp();
+
+          // 2. Restauración de tamaños de letra guardados por canción
+          const cachedFontSizes = safeGetLocal('atril_song_fonts');
+          if (cachedFontSizes) {
+            try { 
+              songFontSizes.value = JSON.parse(cachedFontSizes); 
+            } catch (e) {
+              console.warn("Error al parsear tamaños de fuente:", e);
+            }
+          }
+
+          // 3. Listener para el botón 'Atrás' del celular / navegador
           window.addEventListener('popstate', (event) => {
             if (showDeleteModal.value) { showDeleteModal.value = false; return; }
             if (showSingerModal.value) { showSingerModal.value = false; return; }
-            if (singerSelectModal.value.isOpen) { singerSelectModal.value.isOpen = false; return; }
-            
+            if (singerSelectModal.value && singerSelectModal.value.isOpen) { 
+              singerSelectModal.value.isOpen = false; 
+              return; 
+            }
+    
             if (event.state && event.state.view) {
               if (event.state.view === 'login') {
                 logout();
@@ -1243,13 +1252,12 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             }
           });
 
-          onMounted(() => {
-            // 🚀 Carga instantánea de caché local + auto-login + sincronización en 2do plano
-            inicializarApp();
+          // 4. Adaptación de pantalla
+          window.addEventListener('resize', () => { 
+            isMobile.value = window.innerWidth < 640; 
           });
 
-          window.addEventListener('resize', () => { isMobile.value = window.innerWidth < 640; });
-          window.addEventListener('online', () => { procesarSincronizacion(); });
+          // 5. Control de pantalla completa
           document.addEventListener('fullscreenchange', () => {
             const nativeFull = !!document.fullscreenElement;
             if (nativeFull) {
@@ -1266,25 +1274,14 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
               }
             }
           });
-          
-          const cachedSongs = safeGetLocal('atril_songs_data');
-          if (cachedSongs) {
-            try { songs.value = JSON.parse(cachedSongs); isLoading.value = false; } catch (e) { isLoading.value = false; }
-          } else { isLoading.value = true; }
-          
-          const cachedRep = safeGetLocal('atril_repertorios_data');
-          if (cachedRep) {
-            try { repertorios.value = JSON.parse(cachedRep); } catch (e) {}
-          }
-          const cachedFontSizes = safeGetLocal('atril_song_fonts');
-          if (cachedFontSizes) {
-            try { songFontSizes.value = JSON.parse(cachedFontSizes); } catch (e) {}
-          }
-          
+
+          // 6. Procesa tareas pendientes hechas sin internet (NO descarga de la nube)
+          window.addEventListener('online', () => { 
+            procesarSincronizacion(); 
+          });
+
           if (navigator.onLine) {
             procesarSincronizacion();
-          } else {
-            isLoading.value = false;
           }
         });
 
