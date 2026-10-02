@@ -1305,8 +1305,7 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             procesarSincronizacion();
           }
         });
-
-        const effectiveFontSize = computed(() => {
+const effectiveFontSize = computed(() => {
           let val = 15;
           if (activeSong.value && activeSong.value.id && songFontSizes.value[activeSong.value.id]) {
             val = Number(songFontSizes.value[activeSong.value.id]);
@@ -1352,21 +1351,26 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
           return Array.from(set).sort();
         });
 
+        // Computada para obtener y ordenar ritmos del género activo respetando el orden global
         const listaRitmosDelGenero = computed(() => {
           const set = new Set();
-          (songs.value || []).filter(s => s && s.genero && s.genero.toUpperCase() === activeGenero.value.toUpperCase())
-               .forEach(s => { if (s.ritmo) set.add(s.ritmo.toUpperCase()); });
+          (songs.value || [])
+            .filter(s => s && s.genero && s.genero.toUpperCase() === activeGenero.value.toUpperCase())
+            .forEach(s => { if (s.ritmo) set.add(s.ritmo.toUpperCase()); });
           
           let arr = Array.from(set).sort();
-          arr.sort((a, b) => {
-            let idxA = customRitmoOrder.value.indexOf(a);
-            let idxB = customRitmoOrder.value.indexOf(b);
+          const orderArr = Array.isArray(customRitmoOrder.value) ? customRitmoOrder.value : [];
+
+          if (orderArr.length === 0) return arr;
+
+          return arr.sort((a, b) => {
+            let idxA = orderArr.indexOf(a);
+            let idxB = orderArr.indexOf(b);
             if (idxA === -1 && idxB === -1) return a.localeCompare(b);
             if (idxA === -1) return 1;
             if (idxB === -1) return -1;
             return idxA - idxB;
           });
-          return arr;
         });
 
         const songsByActiveGeneroAndRitmo = computed(() => {
@@ -1473,12 +1477,16 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             const arr = [...listaRitmosDelGenero.value];
             const moved = arr.splice(oldIndex, 1)[0];
             arr.splice(newIndex, 0, moved);
-            let currentOrder = [...customRitmoOrder.value];
+
+            let currentOrder = Array.isArray(customRitmoOrder.value) ? [...customRitmoOrder.value] : [];
             currentOrder = currentOrder.filter(x => !arr.includes(x));
-            customRitmoOrder.value = [...currentOrder, ...arr];
-            safeSetLocal('atril_ritmo_order', JSON.stringify(customRitmoOrder.value));
+            
+            const nuevoOrdenUnificado = [...currentOrder, ...arr];
+            customRitmoOrder.value = nuevoOrdenUnificado;
+            safeSetLocal('atril_ritmo_order', JSON.stringify(nuevoOrdenUnificado));
+
             syncing.value = true;
-            runGas('saveRitmoOrder', customRitmoOrder.value).finally(() => { syncing.value = false; });
+            runGas('saveRitmoOrder', nuevoOrdenUnificado).finally(() => { syncing.value = false; });
           }
         }
 
@@ -1504,7 +1512,6 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             guardarRepertoriosEnNube();
           }
         }
-
         function translateChord(chord) {
           if (!chord) return '';
           return useSpanishNomenclatura.value ? (chordMapToES[chord] || chord) : (chordMapToEN[chord] || chord);
