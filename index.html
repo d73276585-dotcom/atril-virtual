@@ -836,127 +836,188 @@
           'DO': 'C', 'RE': 'D', 'MI': 'E', 'FA': 'F', 'SOL': 'G', 'LA': 'A', 'SI': 'B'
         };
         // ==========================================
-        // FUNCIONES AUXILIARES DE ALMACENAMIENTO
-        // ==========================================
-        function safeGetLocal(key, defaultValue = null) {
-          try {
-            const v = localStorage.getItem(key);
-            return v !== null ? v : defaultValue;
-          } catch (e) {
-            console.error("Error leyendo localStorage:", e);
-            return defaultValue;
-          }
-        }
+// FUNCIONES AUXILIARES DE ALMACENAMIENTO
+// ==========================================
+function safeGetLocal(key, defaultValue = null) {
+  try {
+    const v = localStorage.getItem(key);
+    return v !== null ? v : defaultValue;
+  } catch (e) {
+    console.error("Error leyendo localStorage:", e);
+    return defaultValue;
+  }
+}
 
-        function safeSetLocal(key, value) {
-          try {
-            localStorage.setItem(key, value);
-          } catch (e) {
-            console.error("Error escribiendo localStorage:", e);
-          }
-        }
+function safeSetLocal(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.error("Error escribiendo localStorage:", e);
+  }
+}
 
-        // ==========================================
-        // 1. RESTAURACIÓN OFFLINE
-        // ==========================================
-        function restaurarSesionLocal() {
-          console.log("🔍 Verificando sesión local...");
+// ==========================================
+// 1. RESTAURACIÓN OFFLINE
+// ==========================================
+function restaurarSesionLocal() {
+  console.log("🔍 Verificando sesión local...");
   
-          const savedPin = safeGetLocal('atril_saved_pin');
-          const savedUser = safeGetLocal('atril_current_user');
-          const cachedSongs = safeGetLocal('atril_songs_cache');
-          const cachedReps = safeGetLocal('atril_repertorios_cache');
-          const cachedUsers = safeGetLocal('atril_usuarios_data');
+  const savedPin = safeGetLocal('atril_saved_pin');
+  const savedUser = safeGetLocal('atril_current_user');
+  const savedRole = safeGetLocal('atril_user_role');
+  const cachedSongs = safeGetLocal('atril_songs_cache');
+  const cachedReps = safeGetLocal('atril_repertorios_cache');
+  const cachedUsers = safeGetLocal('atril_usuarios_data');
 
-          if (cachedSongs) { try { songs.value = JSON.parse(cachedSongs); } catch(e){} }
-          if (cachedReps) { try { repertorios.value = JSON.parse(cachedReps); } catch(e){} }
-          if (cachedUsers) { try { usuarios.value = JSON.parse(cachedUsers); } catch(e){} }
+  if (cachedSongs) { try { songs.value = JSON.parse(cachedSongs); } catch(e){} }
+  if (cachedReps) { try { repertorios.value = JSON.parse(cachedReps); } catch(e){} }
+  if (cachedUsers) { try { usuarios.value = JSON.parse(cachedUsers); } catch(e){} }
 
-          if (savedPin) {
-            console.log("✅ PIN encontrado en memoria:", savedPin);
-            isLoggedIn.value = true;
-            currentUserName.value = savedUser || 'Músico';
+  if (savedPin) {
+    console.log("✅ PIN encontrado en memoria:", savedPin);
+    isLoggedIn.value = true;
+    currentUserName.value = savedUser || 'Músico';
+    userRole.value = savedRole || 'musico';
 
-            if (usuarios.value && usuarios.value.length > 0) {
-              const u = usuarios.value.find(x => String(x.pin).trim() === String(savedPin).trim());
-              if (u) userRole.value = u.rol;
-            }
+    if (usuarios.value && usuarios.value.length > 0) {
+      const u = usuarios.value.find(x => String(x.pin).trim() === String(savedPin).trim());
+      if (u) userRole.value = u.rol;
+    }
 
-            currentView.value = 'generos';
-            console.log("🚀 Sesión cargada offline con éxito. Vista:", currentView.value);
-            return true;
-          } else {
-            console.warn("⚠️ No se encontró ningún PIN guardado en localStorage.");
-            currentView.value = 'login';
-            return false;
-          }
-        }
+    currentView.value = 'generos';
+    
+    // Desbloquea la interfaz
+    isLoading.value = false;
+    syncing.value = false;
 
-        // ==========================================
-        // 2. ARRANQUE DE LA APLICACIÓN
-        // ==========================================
-        function inicializarApp() {
-          console.log("🎬 Inicializando aplicación...");
-          // A. Restaura sesión desde memoria
-          restaurarSesionLocal();
+    console.log("🚀 Sesión cargada offline con éxito. Vista:", currentView.value);
+    return true;
+  } else {
+    console.warn("⚠️ No se encontró ningún PIN guardado en localStorage.");
+    currentView.value = 'login';
+    isLoading.value = false;
+    syncing.value = false;
+    return false;
+  }
+}
 
-          // B. Intenta refrescar datos desde la nube si hay red
-          recargarDatos(true);
-        }
+// ==========================================
+// 2. ARRANQUE DE LA APLICACIÓN (CORREGIDO)
+// ==========================================
+function inicializarApp() {
+  console.log("🎬 Inicializando aplicación...");
+  // A. Restaura sesión local inmediatamente
+  restaurarSesionLocal();
 
-        // ==========================================
-        // 3. INICIO DE SESIÓN Y GUARDADO
-        // ==========================================
-        async function loginPin() {
-          const input = String(pinIngresado.value).trim();
-          if (!input) return;
+  // B. Intenta refrescar datos desde Apps Script si hay red
+  recargarDatos(true);
+}
 
-          isCheckingPass.value = true;
-          loginError.value = '';
+// ==========================================
+// 3. INICIO DE SESIÓN Y GUARDADO
+// ==========================================
+async function loginPin() {
+  const input = String(pinIngresado.value).trim();
+  if (!input) return;
 
-          try {
-            if (!usuarios.value || usuarios.value.length === 0) {
-              await recargarDatos(false);
+  isCheckingPass.value = true;
+  loginError.value = '';
 
-              if (!usuarios.value || usuarios.value.length === 0) {
-                const cachedUsers = safeGetLocal('atril_usuarios_data');
-                if (cachedUsers) { try { usuarios.value = JSON.parse(cachedUsers); } catch(e){} }
-              }
-            }
+  try {
+    if (!usuarios.value || usuarios.value.length === 0) {
+      await recargarDatos(false);
 
-            let user = usuarios.value ? usuarios.value.find(u => String(u.pin).trim() === input) : null;
+      if (!usuarios.value || usuarios.value.length === 0) {
+        const cachedUsers = safeGetLocal('atril_usuarios_data');
+        if (cachedUsers) { try { usuarios.value = JSON.parse(cachedUsers); } catch(e){} }
+      }
+    }
 
-            if (user) {
-              userRole.value = user.rol;
-              currentUserName.value = user.nombre;
-              isLoggedIn.value = true;
+    let user = usuarios.value ? usuarios.value.find(u => String(u.pin).trim() === input) : null;
 
-              // 💾 CRÍTICO: Guarda el PIN en localStorage al iniciar sesión
-              safeSetLocal('atril_saved_pin', input);
-              safeSetLocal('atril_current_user', user.nombre);
-              console.log("💾 PIN guardado localmente con éxito:", input);
+    if (user) {
+      userRole.value = user.rol;
+      currentUserName.value = user.nombre;
+      isLoggedIn.value = true;
 
-              pinIngresado.value = '';
+      // Guarda PIN, usuario y rol para el modo offline
+      safeSetLocal('atril_saved_pin', input);
+      safeSetLocal('atril_current_user', user.nombre);
+      safeSetLocal('atril_user_role', user.rol);
 
-              if (!songs.value || songs.value.length === 0) {
-                await recargarDatos(false);
-              }
+      pinIngresado.value = '';
 
-              currentView.value = 'generos';
-              window.history.replaceState({ view: 'login' }, '');
-              window.history.pushState({ view: 'generos' }, '');
-            } else {
-              loginError.value = 'PIN incorrecto o inactivo';
-              pinIngresado.value = '';
-            }
-          } catch (err) {
-            console.error("Error al verificar PIN:", err);
-            loginError.value = 'Error de conexión con el servidor';
-            pinIngresado.value = '';
-          } finally {
-            isCheckingPass.value = false;
-          }
-        }
+      if (!songs.value || songs.value.length === 0) {
+        await recargarDatos(false);
+      }
+
+      currentView.value = 'generos';
+      isLoading.value = false;
+      window.history.replaceState({ view: 'login' }, '');
+      window.history.pushState({ view: 'generos' }, '');
+    } else {
+      loginError.value = 'PIN incorrecto o inactivo';
+      pinIngresado.value = '';
+    }
+  } catch (err) {
+    console.error("Error al verificar PIN:", err);
+    loginError.value = 'Error de conexión con el servidor';
+    pinIngresado.value = '';
+  } finally {
+    isCheckingPass.value = false;
+    isLoading.value = false;
+  }
+}
+
+// ==========================================
+// 4. RECARGA DE DATOS SIN BLOQUEO
+// ==========================================
+async function recargarDatos(esSilencioso = false) {
+  if (typeof esSilencioso !== 'boolean') esSilencioso = false;
+  if (!esSilencioso || !songs.value || songs.value.length === 0) syncing.value = true;
+
+  try {
+    const data = await runGas('getInitialData', !esSilencioso);
+
+    if (data && !data.error) {
+      if (data.songs || data.canciones) {
+        songs.value = data.songs || data.canciones;
+        safeSetLocal('atril_songs_cache', JSON.stringify(songs.value));
+      }
+      if (data.repertorios) {
+        repertorios.value = data.repertorios;
+        safeSetLocal('atril_repertorios_cache', JSON.stringify(data.repertorios));
+      }
+      if (data.ritmosOrder) {
+        ritmosOrder.value = data.ritmosOrder;
+      }
+      if (data.usuarios && Array.isArray(data.usuarios) && data.usuarios.length > 0) {
+        usuarios.value = data.usuarios;
+        safeSetLocal('atril_usuarios_data', JSON.stringify(data.usuarios));
+      }
+    } else {
+      restaurarSesionLocal();
+    }
+  } catch (err) {
+    console.warn("Modo Offline activo (sin red para actualizar).");
+    restaurarSesionLocal();
+  } finally {
+    syncing.value = false;
+    isLoading.value = false;
+  }
+}
+
+// ==========================================
+// 5. REGISTRO SEGURO DE SERVICE WORKER
+// ==========================================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => {
+      // Captura el 404 en entorno Google Apps Script sin romper el script
+      console.warn("Service Worker omitido (entorno Apps Script sin servidor de estáticos):", err.message);
+    });
+  });
+}
 
         // ==========================================
         // 4. LOGOUT
