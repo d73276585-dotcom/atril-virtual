@@ -836,21 +836,44 @@
           'DO': 'C', 'RE': 'D', 'MI': 'E', 'FA': 'F', 'SOL': 'G', 'LA': 'A', 'SI': 'B'
         };
         // ==========================================
-        // 1. RESTAURACIÓN OFFLINE (Memoria local)
+        // FUNCIONES AUXILIARES DE ALMACENAMIENTO
+        // ==========================================
+        function safeGetLocal(key, defaultValue = null) {
+          try {
+            const v = localStorage.getItem(key);
+            return v !== null ? v : defaultValue;
+          } catch (e) {
+            console.error("Error leyendo localStorage:", e);
+            return defaultValue;
+          }
+        }
+
+        function safeSetLocal(key, value) {
+          try {
+            localStorage.setItem(key, value);
+          } catch (e) {
+            console.error("Error escribiendo localStorage:", e);
+          }
+        }
+
+        // ==========================================
+        // 1. RESTAURACIÓN OFFLINE
         // ==========================================
         function restaurarSesionLocal() {
+          console.log("🔍 Verificando sesión local...");
+  
+          const savedPin = safeGetLocal('atril_saved_pin');
+          const savedUser = safeGetLocal('atril_current_user');
           const cachedSongs = safeGetLocal('atril_songs_cache');
           const cachedReps = safeGetLocal('atril_repertorios_cache');
           const cachedUsers = safeGetLocal('atril_usuarios_data');
-          const savedPin = safeGetLocal('atril_saved_pin');
-          const savedUser = safeGetLocal('atril_current_user');
 
           if (cachedSongs) { try { songs.value = JSON.parse(cachedSongs); } catch(e){} }
           if (cachedReps) { try { repertorios.value = JSON.parse(cachedReps); } catch(e){} }
           if (cachedUsers) { try { usuarios.value = JSON.parse(cachedUsers); } catch(e){} }
 
-          // Mantiene la sesión iniciada si existe un PIN guardado
           if (savedPin) {
+            console.log("✅ PIN encontrado en memoria:", savedPin);
             isLoggedIn.value = true;
             currentUserName.value = savedUser || 'Músico';
 
@@ -859,9 +882,13 @@
               if (u) userRole.value = u.rol;
             }
 
-            if (currentView.value === 'login' || !currentView.value) {
-              currentView.value = 'generos';
-            }
+            currentView.value = 'generos';
+            console.log("🚀 Sesión cargada offline con éxito. Vista:", currentView.value);
+            return true;
+          } else {
+            console.warn("⚠️ No se encontró ningún PIN guardado en localStorage.");
+            currentView.value = 'login';
+            return false;
           }
         }
 
@@ -869,15 +896,16 @@
         // 2. ARRANQUE DE LA APLICACIÓN
         // ==========================================
         function inicializarApp() {
-          // A. Carga instantánea desde el almacenamiento interno
+          console.log("🎬 Inicializando aplicación...");
+          // A. Restaura sesión desde memoria
           restaurarSesionLocal();
 
-          // B. Intenta actualizar desde Google Sheets en segundo plano
+          // B. Intenta refrescar datos desde la nube si hay red
           recargarDatos(true);
         }
 
         // ==========================================
-        // 3. LOGIN POR PIN
+        // 3. INICIO DE SESIÓN Y GUARDADO
         // ==========================================
         async function loginPin() {
           const input = String(pinIngresado.value).trim();
@@ -894,7 +922,7 @@
                 const cachedUsers = safeGetLocal('atril_usuarios_data');
                 if (cachedUsers) { try { usuarios.value = JSON.parse(cachedUsers); } catch(e){} }
               }
-           }
+            }
 
             let user = usuarios.value ? usuarios.value.find(u => String(u.pin).trim() === input) : null;
 
@@ -903,8 +931,10 @@
               currentUserName.value = user.nombre;
               isLoggedIn.value = true;
 
+              // 💾 CRÍTICO: Guarda el PIN en localStorage al iniciar sesión
               safeSetLocal('atril_saved_pin', input);
               safeSetLocal('atril_current_user', user.nombre);
+              console.log("💾 PIN guardado localmente con éxito:", input);
 
               pinIngresado.value = '';
 
