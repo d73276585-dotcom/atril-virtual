@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atril-cache-v19';
+const CACHE_NAME = 'atril-cache-v20'; // 🚀 Subimos a v20 para destruir la caché vieja en los celulares
 
 // Recursos críticos a precachar (incluye íconos y CDN)
 const PRECACHE_ASSETS = [
@@ -10,7 +10,7 @@ const PRECACHE_ASSETS = [
   'https://cdn.tailwindcss.com'
 ];
 
-// 1. INSTALACIÓN (Tolerante a errores individuales)
+// 1. INSTALACIÓN
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
@@ -52,23 +52,30 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  // A. Si se está abriendo la App (navegación principal)
+  // A. NAVEGACIÓN PRINCIPAL (NETWORK FIRST)
+  // Intenta descargar el index.html nuevo si hay conexión. Si falla, usa el de la caché.
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match('./index.html').then((cachedIndex) => {
-        if (cachedIndex) return cachedIndex;
-        return caches.match('./').then((cachedRoot) => {
-          if (cachedRoot) return cachedRoot;
-          return fetch(event.request);
-        });
-      }).catch(() => {
-        return caches.match('./index.html');
-      })
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.ok) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put('./index.html', responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match('./index.html').then((cachedIndex) => {
+            return cachedIndex || caches.match('./');
+          });
+        })
     );
     return;
   }
 
-  // B. Para scripts, estilos e imágenes (Cache First con auto-guardado dinámico)
+  // B. Para scripts, estilos e imágenes (Cache First)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -76,7 +83,6 @@ self.addEventListener('fetch', (event) => {
       }
 
       return fetch(event.request).then((networkResponse) => {
-        // Guarda automáticamente en caché cualquier nuevo recurso cargado (Vue, fuentes, etc.)
         if (networkResponse && (networkResponse.ok || networkResponse.type === 'opaque')) {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
