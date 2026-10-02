@@ -1,93 +1,73 @@
-const CACHE_NAME = 'atril-app-v17'; // Cambiado a v17 para forzar la actualización de la caché
+const CACHE_NAME = 'atril-cache-v18';
 
-const INITIAL_ASSETS = [
+// Lista de recursos locales
+const LOCAL_ASSETS = [
   './',
   './index.html',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
-  'https://cdn.tailwindcss.com',
-  'https://unpkg.com/vue@3/dist/vue.global.js',
-  'https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
+  './manifest.json'
 ];
 
-// 1. INSTALACIÓN
+// CDNs externas que requieren modo no-cors
+const EXTERNAL_ASSETS = [
+  'https://cdn.tailwindcss.com'
+];
+
+// Instalación del Service Worker
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      for (const url of INITIAL_ASSETS) {
+      console.log('[SW] Guardando recursos en caché...');
+      
+      // 1. Guardar archivos locales
+      await cache.addAll(LOCAL_ASSETS);
+
+      // 2. Guardar CDNs externas de forma segura (sin bloqueo CORS)
+      for (const url of EXTERNAL_ASSETS) {
         try {
-          // Se realiza una petición estándar para obtener respuestas válidas con CORS cuando estén disponibles
-          const res = await fetch(url);
-          if (res.ok || res.type === 'opaque') {
-            await cache.put(url, res);
-          }
-        } catch (e) {
-          console.warn('[SW] No se pudo guardar en precaché:', url);
+          const req = new Request(url, { mode: 'no-cors' });
+          const res = await fetch(req);
+          await cache.put(req, res);
+        } catch (err) {
+          console.warn('[SW] No se pudo precachar CDN:', url, err);
         }
       }
     })
   );
+  self.skipWaiting();
 });
 
-// 2. ACTIVACIÓN Y LIMPIEZA DE CACHÉ ANTIGUA
+// Activación y limpieza de cachés antiguas
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.map((key) => key !== CACHE_NAME ? caches.delete(key) : null)
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
       );
-    }).then(() => self.clients.claim())
+    })
   );
+  self.clients.claim();
 });
 
-// 3. INTERCEPCIÓN DE PETICIONES (FETCH)
+// Intercepción de peticiones (estrategia Cache First con respaldo Network)
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  const url = event.request.url;
-
-  // NUNCA guardar en caché las consultas a Google Apps Script ni sus dominios de respuesta
-  if (url.includes('script.google.com') || url.includes('googleusercontent.com')) {
-    return;
-  }
-
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      // A. Si el archivo está en caché local, se entrega de inmediato
       if (cachedResponse) {
         return cachedResponse;
       }
-
-      // B. Si no está en caché, intenta obtenerlo de la red
       return fetch(event.request).then((networkResponse) => {
-        // Se permiten tipos 'basic', 'cors' u 'opaque' para guardar archivos de CDN externos (Tailwind, Vue, FontAwesome)
-        if (networkResponse && (networkResponse.status === 200 || networkResponse.type === 'opaque')) {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-
         return networkResponse;
       }).catch(() => {
-        // C. MANEJO DE ERRORES OFFLINE
-        // Si es una navegación entre páginas, devuelve el index.html
+        // Retorna fallback si es una navegación principal
         if (event.request.mode === 'navigate') {
-          return caches.match('./index.html').then((indexRes) => {
-            return indexRes || caches.match('./');
-          });
+          return caches.match('./index.html');
         }
-
-        // ⚠️ CORRECCIÓN CLAVE: Si falla la red para un asset (fuentes, imágenes, CSS) y no está en caché,
-        // devolvemos un objeto Response válido para evitar el error 'TypeError: Failed to convert value to Response'.
-        return new Response('Recurso no disponible sin conexión', {
-          status: 503,
-          statusText: 'Service Unavailable',
-          headers: new Headers({ 'Content-Type': 'text/plain' })
-        });
       });
     })
   );
