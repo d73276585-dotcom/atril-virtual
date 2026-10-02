@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atril-cache-v20'; // 🚀 Subimos a v20 para destruir la caché vieja en los celulares
+const CACHE_NAME = 'atril-cache-v21'; // 🚀 Subimos a v20 para destruir la caché vieja en los celulares
 
 // Recursos críticos a precachar (incluye íconos y CDN)
 const PRECACHE_ASSETS = [
