@@ -980,6 +980,10 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             isCheckingPass.value = false;
             isLoading.value = false;
           }
+          if (res.ritmosOrder && Array.isArray(res.ritmosOrder) && res.ritmosOrder.length > 0) {
+            customRitmoOrder.value = res.ritmosOrder;
+            safeSetLocal('atril_ritmo_order', JSON.stringify(res.ritmosOrder));
+          }
         }
 
         // ==========================================
