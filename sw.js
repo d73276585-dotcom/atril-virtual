@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atril-cache-v22'; // 🚀 Incrementado a v22 para forzar la actualización en los celulares
+const CACHE_NAME = 'atril-cache-v23'; // 🚀 Incrementado a v22 para forzar la actualización en los celulares
 
 // Recursos críticos a precachar (incluye íconos y CDN)
 const PRECACHE_ASSETS = [
