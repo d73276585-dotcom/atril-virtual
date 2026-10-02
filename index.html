@@ -862,21 +862,28 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         };
 
         // ==========================================
-        // 1. RESTAURACIÓN OFFLINE
+        // 1. RESTAURACIÓN OFFLINE (Corregidas claves)
         // ==========================================
         function restaurarSesionLocal() {
           console.log("🔍 Verificando sesión local...");
-          
+  
           const pinGuardado = safeGetLocal('atril_saved_pin');
           const savedUser = safeGetLocal('atril_current_user');
           const savedRole = safeGetLocal('atril_user_role');
-          const cachedSongs = safeGetLocal('atril_songs_cache');
-          const cachedReps = safeGetLocal('atril_repertorios_cache');
+  
+          // Acepta tanto '_cache' como '_data' para no perder compatibilidad
+          const cachedSongs = safeGetLocal('atril_songs_cache') || safeGetLocal('atril_songs_data');
+          const cachedReps = safeGetLocal('atril_repertorios_cache') || safeGetLocal('atril_repertorios_data');
           const cachedUsers = safeGetLocal('atril_usuarios_data');
 
           if (cachedSongs) { try { songs.value = JSON.parse(cachedSongs); } catch(e){} }
           if (cachedReps) { try { repertorios.value = JSON.parse(cachedReps); } catch(e){} }
           if (cachedUsers) { try { usuarios.value = JSON.parse(cachedUsers); } catch(e){} }
+
+          // SI SE ENCONTRARON CANCIONES, DESACTIVA LA PANTALLA DE CARGA DE INMEDIATO
+          if (songs.value && songs.value.length > 0) {
+            isLoading.value = false;
+          }
 
           if (pinGuardado) {
             console.log("✅ PIN encontrado en memoria:", pinGuardado);
@@ -889,14 +896,11 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
               if (u) userRole.value = u.rol;
             }
 
-            // Cambia la vista Y fuerza la actualización en el historial del navegador
             currentView.value = 'generos';
             window.history.replaceState({ view: 'generos' }, '');
-            
+    
             isLoading.value = false;
             syncing.value = false;
-
-            console.log("🚀 Sesión cargada offline con éxito. Vista activa: generos");
             return true;
           } else {
             console.warn("⚠️ No se encontró PIN guardado en localStorage.");
@@ -913,19 +917,18 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         // 2. ARRANQUE AUTOMÁTICO
         // ==========================================
         function inicializarApp() {
-          console.log("🎬 Inicializando aplicación desde memoria local...");
+          console.log("🎬 Inicializando aplicación...");
   
-          // A. Restaura sesión y datos guardados en el celular
+          // 1. Carga datos guardados
           restaurarSesionLocal();
 
-          // B. SOLO si NO hay ninguna canción guardada (primera instalación) descarga de la nube
-          if (!songs.value || songs.value.length === 0) {
-            console.log("📦 Base de datos vacía. Descargando datos por primera vez...");
-            recargarDatos(false);
-          } else {
-            // Si ya existen canciones guardadas, entra directo sin tocar internet
+          // 2. Si ya hay canciones, APAGA la pantalla de carga inmediatamente
+          if (songs.value && songs.value.length > 0) {
             isLoading.value = false;
             syncing.value = false;
+          } else {
+            // SOLO si la app está 100% vacía (sin nada en memoria), descarga de la nube
+            recargarDatos(false);
           }
         }
 
@@ -1211,10 +1214,16 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         });
 
         onMounted(() => {
-          // 1. Carga instantánea de sesión y canciones locales (0.1 segundos)
+          // 1. Carga instantánea desde LocalStorage
           inicializarApp();
 
-          // 2. Restauración de tamaños de letra guardados por canción
+          // 2. Apaga la pantalla de carga de inmediato si ya existen canciones en memoria
+          if (songs.value && songs.value.length > 0) {
+            isLoading.value = false;
+            syncing.value = false;
+          }
+
+          // 3. Restaurar tamaños de letra guardados
           const cachedFontSizes = safeGetLocal('atril_song_fonts');
           if (cachedFontSizes) {
             try { 
@@ -1224,7 +1233,7 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             }
           }
 
-          // 3. Listener para el botón 'Atrás' del celular / navegador
+          // 4. Listener para el botón 'Atrás' del celular
           window.addEventListener('popstate', (event) => {
             if (showDeleteModal.value) { showDeleteModal.value = false; return; }
             if (showSingerModal.value) { showSingerModal.value = false; return; }
@@ -1252,12 +1261,12 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             }
           });
 
-          // 4. Adaptación de pantalla
+          // 5. Listener de cambio de tamaño de ventana
           window.addEventListener('resize', () => { 
             isMobile.value = window.innerWidth < 640; 
           });
 
-          // 5. Control de pantalla completa
+          // 6. Control de Pantalla Completa
           document.addEventListener('fullscreenchange', () => {
             const nativeFull = !!document.fullscreenElement;
             if (nativeFull) {
@@ -1275,7 +1284,7 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             }
           });
 
-          // 6. Procesa tareas pendientes hechas sin internet (NO descarga de la nube)
+          // 7. Enviar pendientes de red en 2do plano sin bloquear ni descargar datos
           window.addEventListener('online', () => { 
             procesarSincronizacion(); 
           });
