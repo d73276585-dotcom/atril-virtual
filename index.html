@@ -79,12 +79,7 @@
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen flex flex-col overflow-hidden select-text">
   <div id="app" class="flex-1 flex flex-col h-full max-w-4xl mx-auto w-full p-1 sm:p-4 overflow-hidden" :class="{ 'fixed inset-0 z-50 max-w-none p-0 bg-slate-950': isAppFullscreen || isFullscreen || keepFullscreen }" v-cloak>
-    <!-- PANTALLA DE CARGA INSTANTÁNEA -->
-    <div v-if="isLoading && isLoggedIn && (!songs || songs.length === 0)" class="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-fadeIn">
-      <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p class="text-blue-400 font-bold text-sm tracking-widest uppercase">Cargando base de datos...</p>
-    </div>
-
+    
     <!-- PANTALLA DE LOGIN -->
     <div v-if="!isLoggedIn" class="fixed inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center p-4 animate-fadeIn">
       <div class="bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-sm text-center relative">
