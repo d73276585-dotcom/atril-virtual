@@ -980,10 +980,6 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             isCheckingPass.value = false;
             isLoading.value = false;
           }
-          if (res.ritmosOrder && Array.isArray(res.ritmosOrder) && res.ritmosOrder.length > 0) {
-            customRitmoOrder.value = res.ritmosOrder;
-            safeSetLocal('atril_ritmo_order', JSON.stringify(res.ritmosOrder));
-          }
         }
 
         // ==========================================
@@ -1013,9 +1009,10 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
               }
 
               // 3. Respetar el orden exacto de ritmos definido en Google Sheets
-              if (data.ritmosOrder) {
-                ritmosOrder.value = data.ritmosOrder;
-                safeSetLocal('atril_ritmos_order', JSON.stringify(data.ritmosOrder));
+              if (data.ritmosOrder && Array.isArray(data.ritmosOrder)) {
+                customRitmoOrder.value = data.ritmosOrder;
+                if (typeof ritmosOrder !== 'undefined') ritmosOrder.value = data.ritmosOrder;
+                safeSetLocal('atril_ritmo_order', JSON.stringify(data.ritmosOrder));
               }
 
               // 4. Validación de usuarios y permisos
@@ -1361,12 +1358,13 @@ const effectiveFontSize = computed(() => {
           (songs.value || [])
             .filter(s => s && s.genero && s.genero.toUpperCase() === activeGenero.value.toUpperCase())
             .forEach(s => { if (s.ritmo) set.add(s.ritmo.toUpperCase()); });
-          
-          let arr = Array.from(set).sort();
+
+          let arr = Array.from(set);
           const orderArr = Array.isArray(customRitmoOrder.value) ? customRitmoOrder.value : [];
 
-          if (orderArr.length === 0) return arr;
+          if (orderArr.length === 0) return arr.sort();
 
+          // Preserva estrictamente el orden definido en orderArr
           return arr.sort((a, b) => {
             let idxA = orderArr.indexOf(a);
             let idxB = orderArr.indexOf(b);
