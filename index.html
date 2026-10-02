@@ -993,18 +993,28 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             const data = await runGas('getInitialData', !esSilencioso);
 
             if (data && !data.error) {
-              if (data.songs || data.canciones) {
-                songs.value = data.songs || data.canciones;
+              // 1. Guardar canciones en AMBAS claves para garantizar lectura instantánea
+              const cancionesObtenidas = data.songs || data.canciones;
+              if (cancionesObtenidas && cancionesObtenidas.length > 0) {
+                songs.value = cancionesObtenidas;
                 safeSetLocal('atril_songs_cache', JSON.stringify(songs.value));
+                safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
               }
+
+              // 2. Guardar repertorios en AMBAS claves
               if (data.repertorios) {
                 repertorios.value = data.repertorios;
                 safeSetLocal('atril_repertorios_cache', JSON.stringify(data.repertorios));
-              }
-              if (data.ritmosOrder) {
-                ritmosOrder.value = data.ritmosOrder;
+                safeSetLocal('atril_repertorios_data', JSON.stringify(data.repertorios));
               }
 
+              // 3. Respetar el orden exacto de ritmos definido en Google Sheets
+              if (data.ritmosOrder) {
+                ritmosOrder.value = data.ritmosOrder;
+                safeSetLocal('atril_ritmos_order', JSON.stringify(data.ritmosOrder));
+              }
+
+              // 4. Validación de usuarios y permisos
               if (data.usuarios && Array.isArray(data.usuarios) && data.usuarios.length > 0) {
                 usuarios.value = data.usuarios;
                 safeSetLocal('atril_usuarios_data', JSON.stringify(data.usuarios));
@@ -1034,6 +1044,7 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             console.warn("Error de red / Modo Offline activo:", err);
             restaurarSesionLocal();
           } finally {
+            // GARANTIZA que el botón deje de girar y la carga se apague SIEMPRE
             syncing.value = false;
             isLoading.value = false;
           }
@@ -1044,19 +1055,24 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             const queue = JSON.parse(safeGetLocal('atril_offline_queue', '[]'));
             if (queue.length > 0) {
               syncing.value = true;
-              for (const item of queue) {
-                try {
-                  const args = Array.isArray(item.payload) ? item.payload : [item.payload];
-                  await runGas(item.action, ...args);
-                } catch (e) {
-                  console.error("Error sincronizando elemento:", e);
+              try {
+                for (const item of queue) {
+                  try {
+                    const args = Array.isArray(item.payload) ? item.payload : [item.payload];
+                    await runGas(item.action, ...args);
+                  } catch (e) {
+                    console.error("Error sincronizando elemento individual:", e);
+                  }
                 }
+                safeSetLocal('atril_offline_queue', '[]');
+              } catch (errGlobal) {
+                console.error("Error procesar cola de sincronización:", errGlobal);
+              } finally {
+                // Apagado seguro del indicador de sincronización
+                syncing.value = false;
               }
-              safeSetLocal('atril_offline_queue', '[]');
-              syncing.value = false;
             }
           }
-          // Se quitó recargarDatos(true) de aquí para no ralentizar el inicio
         }
 
         // ==========================================
@@ -1089,7 +1105,7 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         }
 
         // ==========================================
-        // 6. NAVEGACIÓN
+        // 6. NAVEGACIÓN (Corregido fallo de navegación)
         // ==========================================
         function resetNavegacion() {
           searchTerm.value = '';
@@ -1129,7 +1145,8 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         }
 
         function retroceder() {
-          if (singerSelectModal.value.isOpen) {
+          // Verificación segura para evitar bloqueos
+          if (singerSelectModal.value && singerSelectModal.value.isOpen) {
             singerSelectModal.value.isOpen = false;
             return;
           }
@@ -1862,7 +1879,7 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
 
         function abrirCreador() {
           editingSongId.value = null;
-          editForm.value = { id: null, titulo: '', tonoOriginal: '', modalidad: '', genero: activeGenero.value || '', ritmo: activeRitmo.value || '', letraConAcordes: '' };
+          editForm.value = { id: null, titulo: '', tonoOriginal: '', modalidad: '', genero: '', ritmo: '', letraConAcordes: '' };
           undoStack.value = [];
           redoStack.value = [];
           irA('creador');
