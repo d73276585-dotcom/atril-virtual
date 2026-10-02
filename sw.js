@@ -1,34 +1,29 @@
-const CACHE_NAME = 'atril-cache-v18';
+const CACHE_NAME = 'atril-cache-v19';
 
-// Lista de recursos locales
-const LOCAL_ASSETS = [
+// Recursos críticos a precachar (incluye íconos y CDN)
+const PRECACHE_ASSETS = [
   './',
   './index.html',
-  './manifest.json'
-];
-
-// CDNs externas que requieren modo no-cors
-const EXTERNAL_ASSETS = [
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
   'https://cdn.tailwindcss.com'
 ];
 
-// Instalación del Service Worker
+// 1. INSTALACIÓN (Tolerante a errores individuales)
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
       console.log('[SW] Guardando recursos en caché...');
-      
-      // 1. Guardar archivos locales
-      await cache.addAll(LOCAL_ASSETS);
-
-      // 2. Guardar CDNs externas de forma segura (sin bloqueo CORS)
-      for (const url of EXTERNAL_ASSETS) {
+      for (const asset of PRECACHE_ASSETS) {
         try {
-          const req = new Request(url, { mode: 'no-cors' });
+          const req = new Request(asset, { mode: asset.startsWith('http') ? 'no-cors' : 'cors' });
           const res = await fetch(req);
-          await cache.put(req, res);
+          if (res.ok || res.type === 'opaque') {
+            await cache.put(asset, res);
+          }
         } catch (err) {
-          console.warn('[SW] No se pudo precachar CDN:', url, err);
+          console.warn('[SW] No se pudo guardar en precaché:', asset, err);
         }
       }
     })
@@ -36,13 +31,14 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activación y limpieza de cachés antiguas
+// 2. ACTIVACIÓN Y LIMPIEZA DE CACHÉ ANTIGUA
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('[SW] Borrando caché obsoleta:', key);
             return caches.delete(key);
           }
         })
@@ -52,22 +48,44 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Intercepción de peticiones (estrategia Cache First con respaldo Network)
+// 3. INTERCEPCIÓN DE RED Y NAVEGACIÓN OFFLINE
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
+  // A. Si se está abriendo la App (navegación principal)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      caches.match('./index.html').then((cachedIndex) => {
+        if (cachedIndex) return cachedIndex;
+        return caches.match('./').then((cachedRoot) => {
+          if (cachedRoot) return cachedRoot;
+          return fetch(event.request);
+        });
+      }).catch(() => {
+        return caches.match('./index.html');
+      })
+    );
+    return;
+  }
+
+  // B. Para scripts, estilos e imágenes (Cache First con auto-guardado dinámico)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
         return cachedResponse;
       }
+
       return fetch(event.request).then((networkResponse) => {
+        // Guarda automáticamente en caché cualquier nuevo recurso cargado (Vue, fuentes, etc.)
+        if (networkResponse && (networkResponse.ok || networkResponse.type === 'opaque')) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
         return networkResponse;
       }).catch(() => {
-        // Retorna fallback si es una navegación principal
-        if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
+        return new Response('', { status: 503, statusText: 'Offline' });
       });
     })
   );
