@@ -80,7 +80,7 @@
 <body class="bg-slate-950 text-slate-100 h-screen flex flex-col overflow-hidden select-text">
   <div id="app" class="flex-1 flex flex-col h-full max-w-4xl mx-auto w-full p-1 sm:p-4 overflow-hidden" :class="{ 'fixed inset-0 z-50 max-w-none p-0 bg-slate-950': isAppFullscreen || isFullscreen || keepFullscreen }" v-cloak>
     <!-- PANTALLA DE CARGA INSTANTÁNEA -->
-    <div v-if="isLoading && isLoggedIn" class="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-fadeIn">
+    <div v-if="isLoading && isLoggedIn && (!songs || songs.length === 0)" class="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-fadeIn">
       <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
       <p class="text-blue-400 font-bold text-sm tracking-widest uppercase">Cargando base de datos...</p>
     </div>
@@ -802,7 +802,7 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         const showChords = ref(false); 
         const songs = ref([]);
         const syncing = ref(false);
-        const isLoading = ref(true); // Inicia en true hasta verificar la sesión
+        const isLoading = ref(false); // Inicia en true hasta verificar la sesión
         const currentView = ref('login'); // Inicia en login hasta verificar
         const activeContextMode = ref('generos');
         const activeGenero = ref('');
