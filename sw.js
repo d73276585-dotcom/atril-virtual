@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atril-cache-v21'; // 🚀 Subimos a v20 para destruir la caché vieja en los celulares
+const CACHE_NAME = 'atril-cache-v22'; // 🚀 Incrementado a v22 para forzar la actualización en los celulares
 
 // Recursos críticos a precachar (incluye íconos y CDN)
 const PRECACHE_ASSETS = [
@@ -14,7 +14,7 @@ const PRECACHE_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      console.log('[SW] Guardando recursos en caché...');
+      console.log('[SW] Guardando recursos en caché v22...');
       for (const asset of PRECACHE_ASSETS) {
         try {
           const req = new Request(asset, { mode: asset.startsWith('http') ? 'no-cors' : 'cors' });
