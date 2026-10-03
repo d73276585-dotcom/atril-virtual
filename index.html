@@ -2256,9 +2256,21 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
 
   <!-- REGISTRO AUTOMÁTICO DE SERVICE WORKER PARA MODO PWA OFFLINE -->
   <script>
-    if ('serviceWorker' in navigator && typeof google === 'undefined') {
-      navigator.serviceWorker.register('./sw.js').catch(function(err) {
-        console.warn("Service Worker omitido o no disponible:", err);
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then((reg) => {
+          // 1. Fuerza al navegador a buscar si 'sw.js' cambió en GitHub
+          reg.update();
+        }).catch(err => console.error('[SW] Error al registrar:', err));
+      });
+
+      // 2. OBLIGATORIO: Cuando el nuevo SW tome el control, recarga la página
+      let recargando = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!recargando) {
+          recargando = true;
+          window.location.reload();
+        }
       });
     }
   </script>
