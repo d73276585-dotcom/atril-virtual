@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atril-cache-v29'; 
+const CACHE_NAME = 'atril-cache-v30'; // <-- Incrementar siempre al publicar cambios
 
 const PRECACHE_ASSETS = [
   './',
@@ -27,7 +27,7 @@ self.addEventListener('install', (event) => {
       }
     })
   );
-  self.skipWaiting(); // Se instala inmediatamente
+  self.skipWaiting(); // Se instala e interrumpe la versión vieja inmediatamente
 });
 
 // 2. ACTIVACIÓN Y LIMPIEZA DE CACHÉ ANTIGUA
@@ -51,6 +51,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
+  // Para navegación (Carga de la página index.html)
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
@@ -72,6 +73,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Para el resto de archivos (imágenes, scripts, estilos)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
