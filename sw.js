@@ -1,6 +1,5 @@
-const CACHE_NAME = 'atril-cache-v29'; // 🚀 Incrementado a v22 para forzar la actualización en los celulares
+const CACHE_NAME = 'atril-cache-v29'; 
 
-// Recursos críticos a precachar (incluye íconos y CDN)
 const PRECACHE_ASSETS = [
   './',
   './index.html',
@@ -14,7 +13,7 @@ const PRECACHE_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      console.log('[SW] Guardando recursos en caché v22...');
+      console.log('[SW] Guardando recursos en caché ' + CACHE_NAME + '...');
       for (const asset of PRECACHE_ASSETS) {
         try {
           const req = new Request(asset, { mode: asset.startsWith('http') ? 'no-cors' : 'cors' });
@@ -28,7 +27,7 @@ self.addEventListener('install', (event) => {
       }
     })
   );
-  self.skipWaiting();
+  self.skipWaiting(); // Se instala inmediatamente
 });
 
 // 2. ACTIVACIÓN Y LIMPIEZA DE CACHÉ ANTIGUA
@@ -45,15 +44,13 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  self.clients.claim();
+  self.clients.claim(); // Toma el control de la página de inmediato
 });
 
-// 3. INTERCEPCIÓN DE RED Y NAVEGACIÓN OFFLINE
+// 3. INTERCEPCIÓN DE RED
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  // A. NAVEGACIÓN PRINCIPAL (NETWORK FIRST)
-  // Intenta descargar el index.html nuevo si hay conexión. Si falla, usa el de la caché.
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
@@ -75,7 +72,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // B. Para scripts, estilos e imágenes (Cache First)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
