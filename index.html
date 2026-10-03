@@ -992,17 +992,19 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
           try {
             const data = await runGas('getInitialData', !esSilencioso);
 
-            if (data && !data.error) {
-              // 1. Guardar canciones en AMBAS claves para garantizar lectura instantánea
+            // Validación estricta de la respuesta recibida
+            if (data && typeof data === 'object' && !data.error) {
+              
+              // 1. Guardar canciones en memoria y almacenamiento local
               const cancionesObtenidas = data.songs || data.canciones;
-              if (cancionesObtenidas && cancionesObtenidas.length > 0) {
+              if (Array.isArray(cancionesObtenidas) && cancionesObtenidas.length > 0) {
                 songs.value = cancionesObtenidas;
                 safeSetLocal('atril_songs_cache', JSON.stringify(songs.value));
                 safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
               }
 
-              // 2. Guardar repertorios en AMBAS claves
-              if (data.repertorios) {
+              // 2. Guardar repertorios
+              if (data.repertorios && typeof data.repertorios === 'object') {
                 repertorios.value = data.repertorios;
                 safeSetLocal('atril_repertorios_cache', JSON.stringify(data.repertorios));
                 safeSetLocal('atril_repertorios_data', JSON.stringify(data.repertorios));
@@ -1015,8 +1017,8 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
                 safeSetLocal('atril_ritmo_order', JSON.stringify(data.ritmosOrder));
               }
 
-              // 4. Validación de usuarios y permisos
-              if (data.usuarios && Array.isArray(data.usuarios) && data.usuarios.length > 0) {
+              // 4. Validación de usuarios y permisos de acceso
+              if (Array.isArray(data.usuarios) && data.usuarios.length > 0) {
                 usuarios.value = data.usuarios;
                 safeSetLocal('atril_usuarios_data', JSON.stringify(data.usuarios));
 
@@ -1039,40 +1041,50 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
                 }
               }
             } else {
+              console.warn("Respuesta de la nube no válida o con error. Usando respaldo local.");
               restaurarSesionLocal();
             }
           } catch (err) {
             console.warn("Error de red / Modo Offline activo:", err);
             restaurarSesionLocal();
           } finally {
-            // GARANTIZA que el botón deje de girar y la carga se apague SIEMPRE
+            // Apagado garantizado de indicadores de carga y sincronización
             syncing.value = false;
             isLoading.value = false;
           }
         }
 
         async function procesarSincronizacion() {
-          if (navigator.onLine) {
-            const queue = JSON.parse(safeGetLocal('atril_offline_queue', '[]'));
-            if (queue.length > 0) {
-              syncing.value = true;
+          if (!navigator.onLine) return;
+
+          let queue = [];
+          try {
+            queue = JSON.parse(safeGetLocal('atril_offline_queue', '[]'));
+          } catch (e) {
+            queue = [];
+          }
+
+          // Filtrar y eliminar lecturas como 'getInitialData' de la cola de guardado
+          queue = queue.filter(item => item && item.action && item.action !== 'getInitialData');
+
+          if (queue.length > 0) {
+            syncing.value = true;
+            const remainingQueue = [];
+
+            for (const item of queue) {
               try {
-                for (const item of queue) {
-                  try {
-                    const args = Array.isArray(item.payload) ? item.payload : [item.payload];
-                    await runGas(item.action, ...args);
-                  } catch (e) {
-                    console.error("Error sincronizando elemento individual:", e);
-                  }
-                }
-                safeSetLocal('atril_offline_queue', '[]');
-              } catch (errGlobal) {
-                console.error("Error procesar cola de sincronización:", errGlobal);
-              } finally {
-                // Apagado seguro del indicador de sincronización
-                syncing.value = false;
+                const args = Array.isArray(item.payload) ? item.payload : [item.payload];
+                await runGas(item.action, ...args);
+              } catch (e) {
+                console.error(`Error sincronizando la acción ${item.action}:`, e);
+                remainingQueue.push(item); // Conservar elementos que fallaron para reintentar luego
               }
             }
+
+            safeSetLocal('atril_offline_queue', JSON.stringify(remainingQueue));
+            syncing.value = false;
+          } else {
+            safeSetLocal('atril_offline_queue', '[]');
           }
         }
 
@@ -1106,7 +1118,7 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         }
 
         // ==========================================
-        // 6. NAVEGACIÓN (Corregido fallo de navegación)
+        // 6. NAVEGACIÓN Y RUTA
         // ==========================================
         function resetNavegacion() {
           searchTerm.value = '';
@@ -1146,7 +1158,6 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         }
 
         function retroceder() {
-          // Verificación segura para evitar bloqueos
           if (singerSelectModal.value && singerSelectModal.value.isOpen) {
             singerSelectModal.value.isOpen = false;
             return;
@@ -1175,10 +1186,19 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             irA(parent, true);
           }
         }
+
+        // Manejo seguro del zoom táctil en el visor sin fugas de memoria
+        let cleanUpTouchListeners = null;
         watch(visorScroll, (el) => {
+          if (cleanUpTouchListeners) {
+            cleanUpTouchListeners();
+            cleanUpTouchListeners = null;
+          }
           if (!el) return;
+
           let initialDist = 0;
           let initialSize = 12;
+
           const getDynamicMaxFontSize = () => {
             if (!el) return 35;
             const pre = el.querySelector('pre');
@@ -1195,12 +1215,14 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             }
             return 35;
           };
+
           const handleTouchStart = (e) => {
             if (e.touches && e.touches.length === 2) {
               initialDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
               initialSize = effectiveFontSize.value;
             } else { initialDist = 0; }
           };
+
           const handleTouchMove = (e) => {
             if (!e.touches || e.touches.length !== 2 || initialDist <= 0) return;
             if (e.cancelable) e.preventDefault();
@@ -1209,6 +1231,7 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             let newSize = Math.round((initialSize * scale) * 10) / 10;
             const dynamicMax = getDynamicMaxFontSize();
             newSize = Math.max(7, Math.min(dynamicMax, newSize));
+
             if (activeSong.value && activeSong.value.id) {
               songFontSizes.value = { ...songFontSizes.value, [activeSong.value.id]: newSize };
               safeSetLocal('atril_song_fonts', JSON.stringify(songFontSizes.value));
@@ -1217,36 +1240,45 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
               safeSetLocal('atril_global_font_size', newSize.toString());
             }
           };
+
           const handleTouchEnd = (e) => {
             if (!e.touches || e.touches.length < 2) initialDist = 0;
           };
+
           el.addEventListener('touchstart', handleTouchStart, { passive: true });
           el.addEventListener('touchmove', handleTouchMove, { passive: false });
           el.addEventListener('touchend', handleTouchEnd, { passive: true });
           el.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+
+          cleanUpTouchListeners = () => {
+            el.removeEventListener('touchstart', handleTouchStart);
+            el.removeEventListener('touchmove', handleTouchMove);
+            el.removeEventListener('touchend', handleTouchEnd);
+            el.removeEventListener('touchcancel', handleTouchEnd);
+          };
         });
 
         onMounted(() => {
-          // 1. Carga instantánea desde LocalStorage
+          // 1. Carga inicial desde memoria local
           inicializarApp();
 
-          // 2. Apaga la pantalla de carga de inmediato si ya existen canciones en memoria
+          // 2. Apagar pantalla de carga si existen datos locales
           if (songs.value && songs.value.length > 0) {
             isLoading.value = false;
             syncing.value = false;
           }
 
-          // 3. Restaurar tamaños de letra guardados
+          // 3. Restaurar tamaños de fuentes personalizadas
           const cachedFontSizes = safeGetLocal('atril_song_fonts');
           if (cachedFontSizes) {
             try { 
               songFontSizes.value = JSON.parse(cachedFontSizes); 
             } catch (e) {
-              console.warn("Error al parsear tamaños de fuente:", e);
+              console.warn("Error parseando fuentes guardadas:", e);
             }
           }
 
-          // 4. Listener para el botón 'Atrás' del celular
+          // 4. Control del botón retroceder físico / navegador
           window.addEventListener('popstate', (event) => {
             if (showDeleteModal.value) { showDeleteModal.value = false; return; }
             if (showSingerModal.value) { showSingerModal.value = false; return; }
@@ -1274,12 +1306,12 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             }
           });
 
-          // 5. Listener de cambio de tamaño de ventana
+          // 5. Redimensionamiento de pantalla
           window.addEventListener('resize', () => { 
             isMobile.value = window.innerWidth < 640; 
           });
 
-          // 6. Control de Pantalla Completa
+          // 6. Estado de pantalla completa
           document.addEventListener('fullscreenchange', () => {
             const nativeFull = !!document.fullscreenElement;
             if (nativeFull) {
@@ -1297,7 +1329,7 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             }
           });
 
-          // 7. Enviar pendientes de red en 2do plano sin bloquear ni descargar datos
+          // 7. Sincronización en segundo plano al recuperar red
           window.addEventListener('online', () => { 
             procesarSincronizacion(); 
           });
@@ -1306,7 +1338,11 @@ const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
             procesarSincronizacion();
           }
         });
-const effectiveFontSize = computed(() => {
+
+        // ==========================================
+        // 7. PROPIEDADES COMPUTADAS Y AUXILIARES
+        // ==========================================
+        const effectiveFontSize = computed(() => {
           let val = 15;
           if (activeSong.value && activeSong.value.id && songFontSizes.value[activeSong.value.id]) {
             val = Number(songFontSizes.value[activeSong.value.id]);
@@ -1352,7 +1388,6 @@ const effectiveFontSize = computed(() => {
           return Array.from(set).sort();
         });
 
-        // Computada para obtener y ordenar ritmos del género activo respetando el orden global
         const listaRitmosDelGenero = computed(() => {
           const set = new Set();
           (songs.value || [])
@@ -1364,7 +1399,6 @@ const effectiveFontSize = computed(() => {
 
           if (orderArr.length === 0) return arr.sort();
 
-          // Preserva estrictamente el orden definido en orderArr
           return arr.sort((a, b) => {
             let idxA = orderArr.indexOf(a);
             let idxB = orderArr.indexOf(b);
@@ -2199,11 +2233,9 @@ const effectiveFontSize = computed(() => {
 
   <!-- REGISTRO AUTOMÁTICO DE SERVICE WORKER PARA MODO PWA OFFLINE -->
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .then(reg => console.log('Service Worker de Atril activo'))
-          .catch(err => console.error('Error al registrar Service Worker:', err));
+    if ('serviceWorker' in navigator && typeof google === 'undefined') {
+      navigator.serviceWorker.register('./sw.js').catch(function(err) {
+        console.warn("Service Worker omitido o no disponible:", err);
       });
     }
   </script>
