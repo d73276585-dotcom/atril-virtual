@@ -205,10 +205,14 @@
             </div>
           </div>
           <div class="bg-slate-900/80 border-b border-slate-800/80 px-1.5 py-1 flex flex-col gap-0.5 flex-shrink-0 z-10 w-full">
-            <div class="flex items-center justify-between px-1 pb-0 w-full gap-2">
+            
+            <!-- MODIFICACIÓN: Se agrega v-show="!showChords" aquí -->
+            <div class="flex items-center justify-between px-1 pb-0 w-full gap-2" v-show="!showChords">
               <span class="bg-blue-950 text-blue-400 text-[10px] sm:text-xs font-mono font-bold px-1.5 py-0.5 rounded border border-blue-800 flex-shrink-0 mt-0.5">#{{ getValidSongId(activeSong) }}</span>
               <h2 class="text-2xl sm:text-4xl font-extrabold text-white uppercase leading-tight tracking-wide break-words text-left flex-1">{{ activeSong.titulo }}</h2>
             </div>
+
+            <!-- La barra de Tono y Zoom se mantiene abajo para que sigas pudiendo transponer o ajustar el tamaño -->
             <div class="flex flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar w-full px-0.5">
               <div class="flex items-center bg-slate-950 px-1.5 py-1 rounded-xl border border-blue-900/50 shadow-inner flex-shrink-0">
                  <span class="text-xs sm:text-xs text-slate-300 font-bold px-1 whitespace-nowrap flex items-center gap-1">
@@ -225,10 +229,15 @@
               </div>
               
                <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 shadow-inner flex-shrink-0">
-                <button @click="ajustarZoom(-0.1)" class="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded-lg font-bold text-xs text-white shadow flex items-center justify-center">A-</button>
-                <span class="font-mono text-[11px] text-blue-400 w-8 text-center">{{ typeof effectiveFontSize === 'number' ? effectiveFontSize.toFixed(1) : effectiveFontSize }}</span>
-                <button @click="ajustarZoom(0.1)" class="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded-lg font-bold text-xs text-white shadow flex items-center justify-center">A+</button>
-             </div>
+                 <!-- Cambiado a -0.05 para un ajuste más fino -->
+                 <button @click="ajustarZoom(-0.05)" class="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded-lg font-bold text-xs text-white shadow flex items-center justify-center">A-</button>
+  
+                 <!-- Cambiado a toFixed(2) para mostrar 2 decimales (11.xx) y w-12 para dar espacio -->
+                 <span class="font-mono text-[11px] text-blue-400 w-12 text-center">{{ typeof effectiveFontSize === 'number' ? effectiveFontSize.toFixed(2) : effectiveFontSize }}</span>
+  
+                 <!-- Cambiado a +0.05 para un ajuste más fino -->
+                 <button @click="ajustarZoom(0.05)" class="w-7 h-7 bg-slate-800 hover:bg-slate-700 rounded-lg font-bold text-xs text-white shadow flex items-center justify-center">A+</button>
+               </div>
             </div>
           </div>
           <div ref="visorScroll" class="flex-1 overflow-y-auto overflow-x-hidden px-1.5 sm:px-8 pt-1 pb-5 sm:pt-3 sm:pb-5 bg-slate-950 select-text w-full max-w-full" style="touch-action: pan-y;">
@@ -730,26 +739,23 @@
       if (!html) return '';
       if (typeof document === 'undefined') return html;
 
-      // 1. Colocar el salto de línea \n EN LA APERTURA de <div> o <p>
-      // Esto asegura que cada nueva línea (ej. "ert") baje correctamente después de "asd"
       let preparedHtml = html
         .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<div[^>]*>/gi, '\n')
-        .replace(/<\/div>/gi, '')
-        .replace(/<p[^>]*>/gi, '\n')
+        .replace(/<div[^>]*>/gi, '\n')     // Vuelve a poner el salto al abrir el div para separar bien las líneas
+        .replace(/<\/div>/gi, '')         
+        .replace(/<p[^>]*>/gi, '\n')      // Vuelve a poner el salto al abrir el p
         .replace(/<\/p>/gi, '');
-
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = preparedHtml;
 
-      // 2. Normalizar <strong> a <b>
+      // Normalizar <strong> a <b>
       tempDiv.querySelectorAll('strong').forEach(s => {
         const b = document.createElement('b');
         b.innerHTML = s.innerHTML;
         s.parentNode.replaceChild(b, s);
       });
 
-      // 3. Normalizar <span> con estilos de color o negrita
+      // Normalizar <span> con estilos de color o negrita
       const spans = Array.from(tempDiv.querySelectorAll('span')).reverse();
       spans.forEach(span => {
         const color = span.style.color;
@@ -761,7 +767,7 @@
         }
 
         if (color) {
-         const hexColor = (typeof rgbToHex === 'function' ? rgbToHex(color) : color).toLowerCase();
+          const hexColor = (typeof rgbToHex === 'function' ? rgbToHex(color) : color).toLowerCase();
           const isDefaultColor = ['#e2e8f0', '#ffffff', '#f8fafc', 'rgb(226, 232, 240)', 'rgb(255, 255, 255)', 'inherit', 'initial', 'transparent'].includes(hexColor);
           if (!isDefaultColor) {
             inner = `<font color="${hexColor}">${inner}</font>`;
@@ -778,14 +784,12 @@
 
       let raw = tempDiv.innerHTML;
 
-      // 4. Limpieza de caracteres y etiquetas vacías
       raw = raw
         .replace(/<\/?o:p[^>]*>/gi, '')
         .replace(/&nbsp;/gi, ' ');
 
       raw = raw.replace(/<font color="(?:#e2e8f0|#ffffff|rgb\(226, 232, 240\)|rgb\(255, 255, 255\))">([\s\S]*?)<\/font>/gi, '$1');
 
-      // 5. Mapear y procesar cada línea
       const rawLines = raw.split(/\r?\n/);
       const cleanLines = rawLines.map(line => {
         if (!line.trim()) return '';
@@ -800,13 +804,13 @@
         return cleanLine;
       });
 
-      return cleanLines.join('\n').replace(/\n+$/, '');
+      // SOLUCIÓN: Limpia los saltos iniciales/finales y evita que se multipliquen las líneas vacías al guardar
+      return cleanLines.join('\n')
+        .replace(/\r\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n') 
+        .replace(/^\n+/, '') // Esto borra cualquier espacio fantasma al inicio
+        .replace(/\n+$/, '');
     }
-
-        function formatForEditor(content) {
-          if (!content) return '';
-          return content.replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
-        }
 
     const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
     const app = createApp({
@@ -1279,7 +1283,7 @@
             if (e.cancelable) e.preventDefault();
             const currentDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
             const scale = currentDist / initialDist;
-            let newSize = Math.round((initialSize * scale) * 10) / 10;
+            let newSize = Math.round((initialSize * scale) * 100) / 100;
             const dynamicMax = getDynamicMaxFontSize();
             newSize = Math.max(7, Math.min(dynamicMax, newSize));
 
@@ -1395,7 +1399,8 @@
         // ==========================================
         const effectiveFontSize = computed(() => {
           let val = 15;
-          if (activeSong.value && activeSong.value.id && songFontSizes.value[activeSong.value.id]) {
+          // Validación estricta para evitar saltos raros entre canciones
+          if (activeSong.value && activeSong.value.id && songFontSizes.value[activeSong.value.id] !== undefined) {
             val = Number(songFontSizes.value[activeSong.value.id]);
           } else {
             const customGlobal = safeGetLocal('atril_global_font_size');
@@ -1403,12 +1408,13 @@
             else if (isMobile.value) val = showChords.value ? 10 : 13;
             else val = 15;
           }
-          return Math.round(Math.max(7, Math.min(35, val)) * 10) / 10;
+          // Redondeo exacto a 2 decimales
+          return Math.round(Math.max(7, Math.min(35, val)) * 100) / 100;
         });
 
         const computedLineHeight = computed(() => {
-          const factor = showChords.value ? 1.3 : 1.2;
-          return Math.round(effectiveFontSize.value * factor) + 'px';
+          // Devuelve directamente el multiplicador sin redondear a píxeles enteros
+          return showChords.value ? 1.3 : 1.2;
         });
 
         function toggleChords() {
@@ -1743,10 +1749,14 @@
           if (!token) return true;
           let clean = token.replace(/^[^a-zA-Z0-9\#b♯♭ºΔ+]+|[^a-zA-Z0-9\#b♯♭ºΔ+]+$/g, '').trim();
           if (!clean) return true;
-          if (/^(?:\||\+|%|x\d+|\d+x|\d+\.|\d+|-|\|{|}|INTRO|VERSO|CORO|ESTROFA|PUENTE|OUTRO|SOLO|INTERLUDIO|FINAL|CODA|BIS|PRE-CORO|PRECORO|RITMO|TONO|PAUSA|CORTE|PARADA|FIN)/i.test(clean)) return true;
+          
+          // Mantenemos solo las etiquetas estructurales reales y eliminamos palabras comunes 
+          // (como FIN, BIS, -, TONO, RITMO, PAUSA) para que no rompan las oraciones normales de la letra.
+          if (/^(?:\||\+|%|x\d+|\d+x|\d+\.|\d+|\|{|}|INTRO|VERSO|CORO|ESTROFA|PUENTE|OUTRO|SOLO|INTERLUDIO|FINAL|CODA|PRE-CORO|PRECORO)/i.test(clean)) return true;
+          
           return false;
         }
-
+        
         function isChord(token) {
           if (!token) return false;
           let clean = token.replace(/^[^a-zA-Z0-9\#b♯♭ºΔ+]+|[^a-zA-Z0-9\#b♯♭ºΔ+]+$/g, '').trim();
@@ -1904,7 +1914,7 @@
 
         function ajustarZoom(delta) {
           let current = effectiveFontSize.value;
-          let newSize = Math.round((current + delta) * 10) / 10;
+          let newSize = Math.round((current + delta) * 100) / 100;
           newSize = Math.max(7, Math.min(35, newSize));
           if (activeSong.value && activeSong.value.id) {
             songFontSizes.value = { ...songFontSizes.value, [activeSong.value.id]: newSize };
@@ -1916,10 +1926,29 @@
         }
 
         function resetAutoZoom() {
-          if (activeSong.value && activeSong.value.id) {
-            delete songFontSizes.value[activeSong.value.id];
-            safeSetLocal('atril_song_fonts', JSON.stringify(songFontSizes.value));
+          if (!activeSong.value || !activeSong.value.id || !visorScroll.value) return;
+          const el = visorScroll.value;
+          const pre = el.querySelector('pre');
+          if (!pre) return;
+
+          // Analiza la línea más larga actual (con o sin acordes)
+          const lines = pre.innerText ? pre.innerText.split('\n') : [];
+          let maxCharCount = 0;
+          lines.forEach(l => { if (l.length > maxCharCount) maxCharCount = l.length; });
+
+          let maxSz = 35;
+          if (maxCharCount > 0) {
+            const availableWidth = el.clientWidth - 12;
+            if (availableWidth > 0) {
+              // Calcula el tamaño máximo exacto para llenar la pantalla sin desbordar
+              const calculatedMax = Math.floor((availableWidth / maxCharCount) / 0.6);
+              maxSz = Math.max(10, Math.min(35, calculatedMax));
+            }
           }
+
+          // Aplica ese tamaño máximo como si hubieras estirado el texto al límite con los dedos
+          songFontSizes.value = { ...songFontSizes.value, [activeSong.value.id]: maxSz };
+          safeSetLocal('atril_song_fonts', JSON.stringify(songFontSizes.value));
         }
 
         function toggleFullscreen() {
@@ -2070,7 +2099,10 @@
 
           nextTick(() => {
             if (editorTextarea.value) {
-              const formatted = formatForEditor(activeSong.value.letraConAcordes);
+              // Asegura que los saltos de línea se conviertan en <br> y se pinten correctamente en el editor
+              const rawContent = activeSong.value.letraConAcordes || '';
+              const formatted = rawContent.replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
+              
               editorTextarea.value.innerHTML = formatted;
               resetHistory(formatted);
               forzarConexionEventos(); 
@@ -2309,7 +2341,9 @@
         function handlePaste(e) {
           e.preventDefault();
           const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-          document.execCommand('insertText', false, text);
+          // Convierte espacios raros de otras páginas web en espacios normales limpios
+          const cleanedText = text ? text.replace(/\u00A0/g, ' ') : '';
+          document.execCommand('insertText', false, cleanedText);
         }
 
         function abrirModalTonosCantante() {
