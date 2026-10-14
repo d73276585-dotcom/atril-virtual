@@ -980,6 +980,11 @@
             // SOLO si la app está 100% vacía (sin nada en memoria), descarga de la nube
             recargarDatos(false);
           }
+
+          // AUTOMÁTICO: Si hay internet, busca canciones nuevas en la nube silenciosamente en segundo plano
+          if (navigator.onLine) {
+            recargarDatos(true);
+          }
         }
 
         // ==========================================
@@ -1387,6 +1392,7 @@
           // 7. Sincronización en segundo plano al recuperar red
           window.addEventListener('online', () => { 
             procesarSincronizacion(); 
+            recargarDatos(true); // <-- Trae las canciones nuevas automáticamente al reconectarse
           });
 
           if (navigator.onLine) {
