@@ -1076,6 +1076,17 @@
                 repertorios.value = repsData;
                 safeSetLocal('atril_repertorios_cache', JSON.stringify(repsData));
                 safeSetLocal('atril_repertorios_data', JSON.stringify(repsData));
+
+                // --- ¡AQUÍ ESTÁ LA SOLUCIÓN CLAVE! ---
+                // Si el celular ya tiene un repertorio abierto en pantalla, 
+                // refrescamos los cantantes en tiempo real con los datos recién bajados de la nube:
+                if (activeRepertorio.value && repertorios.value[activeRepertorio.value]) {
+                  const repActivo = repertorios.value[activeRepertorio.value];
+                  if (!repActivo.cantantesCanciones) {
+                    repActivo.cantantesCanciones = {};
+                  }
+                  songSingerOverrides.value = { ...repActivo.cantantesCanciones };
+                }
               }
 
               // 3. Respetar el orden exacto de ritmos definido en Google Sheets
@@ -1630,7 +1641,7 @@
             guardarRepertoriosEnNube();
           }
         }
-        
+
         function translateChord(chord) {
           if (!chord) return '';
           return useSpanishNomenclatura.value ? (chordMapToES[chord] || chord) : (chordMapToEN[chord] || chord);
