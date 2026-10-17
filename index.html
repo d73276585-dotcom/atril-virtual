@@ -1655,9 +1655,16 @@
 
         function getSongSinger(id, forceRep = false) {
           if (forceRep || isRepertoryContext()) {
+            const rep = repertorios.value[activeRepertorio.value];
+            // 1. Prioriza el cantante específico guardado para esta canción en este repertorio
+            if (rep && rep.cantantesCanciones && rep.cantantesCanciones[id]) {
+              return rep.cantantesCanciones[id];
+            }
             if (songSingerOverrides.value[id]) return songSingerOverrides.value[id];
-            if (repertorios.value[activeRepertorio.value] && repertorios.value[activeRepertorio.value].cantante) {
-              return repertorios.value[activeRepertorio.value].cantante;
+            
+            // 2. Si no tiene uno individual, usa el cantante general del repertorio
+            if (rep && rep.cantante) {
+              return rep.cantante;
             }
             return '';
           }
@@ -1707,7 +1714,21 @@
               guardarRepertoriosEnNube();
             }
           } else if (type === 'repertorio_cancion') {
-            if (songId) songSingerOverrides.value[songId] = singerName;
+            if (songId) {
+              const rep = repertorios.value[activeRepertorio.value];
+              if (rep) {
+                // Creamos el contenedor si no existe
+                if (!rep.cantantesCanciones) {
+                  rep.cantantesCanciones = {};
+                }
+                // Guardamos el cantante específico para esta canción en este repertorio
+                rep.cantantesCanciones[songId] = singerName;
+                
+                // Sincronizamos y guardamos en la nube (Google Sheets) de inmediato
+                guardarRepertoriosEnNube();
+              }
+              songSingerOverrides.value[songId] = singerName;
+            }
           }
           singerSelectModal.value.isOpen = false;
         }
