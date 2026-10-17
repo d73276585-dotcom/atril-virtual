@@ -1615,10 +1615,22 @@
         function removerCancionDeRepertorio(songId) {
           const rep = repertorios.value[activeRepertorio.value];
           if (rep) {
+            // 1. Quita la canción de la lista
             rep.canciones = rep.canciones.filter(id => String(id) !== String(songId));
+            
+            // 2. Limpia el cantante asignado a esta canción para que no quede rastro
+            if (rep.cantantesCanciones && rep.cantantesCanciones[songId]) {
+              delete rep.cantantesCanciones[songId];
+            }
+            if (songSingerOverrides.value[songId]) {
+              delete songSingerOverrides.value[songId];
+            }
+            
+            // 3. Guarda los cambios limpios en la nube
             guardarRepertoriosEnNube();
           }
         }
+        
         function translateChord(chord) {
           if (!chord) return '';
           return useSpanishNomenclatura.value ? (chordMapToES[chord] || chord) : (chordMapToEN[chord] || chord);
