@@ -1063,11 +1063,19 @@
                 safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
               }
 
-              // 2. Guardar repertorios
-              if (data.repertorios && typeof data.repertorios === 'object') {
-                repertorios.value = data.repertorios;
-                safeSetLocal('atril_repertorios_cache', JSON.stringify(data.repertorios));
-                safeSetLocal('atril_repertorios_data', JSON.stringify(data.repertorios));
+              // 2. Guardar repertorios (con soporte inteligente por si vienen como texto JSON o objeto)
+              let repsData = data.repertorios;
+              if (typeof repsData === 'string') {
+                try {
+                  repsData = JSON.parse(repsData);
+                } catch (e) {
+                  console.error("Error al parsear repertorios desde la nube:", e);
+                }
+              }
+              if (repsData && typeof repsData === 'object') {
+                repertorios.value = repsData;
+                safeSetLocal('atril_repertorios_cache', JSON.stringify(repsData));
+                safeSetLocal('atril_repertorios_data', JSON.stringify(repsData));
               }
 
               // 3. Respetar el orden exacto de ritmos definido en Google Sheets
