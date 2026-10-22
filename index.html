@@ -593,7 +593,7 @@
         </div>
       </div>
     </template>
-    
+
     <!-- ⬇️ PUEDES PEGARLO AQUÍ ABAJO ⬇️ -->
     <div class="hidden bg-slate-900 border-slate-800 text-white bg-blue-950/70 border-blue-600 shadow-blue-900/20 bg-emerald-950/70 border-emerald-600 shadow-emerald-900/20 bg-purple-950/70 border-purple-600 shadow-purple-900/20 bg-amber-950/70 border-amber-600 shadow-amber-900/20 bg-rose-950/70 border-rose-600 shadow-rose-900/20 bg-cyan-950/70 border-cyan-600 shadow-cyan-900/20 bg-fuchsia-950/70 border-fuchsia-600 shadow-fuchsia-900/20"></div>
 
@@ -1521,13 +1521,18 @@
         });
 
         const activeSongIndexInContext = computed(() => {
+          // Si estamos en un repertorio, usamos el renglón exacto en lugar de buscar por ID
+          if (activeContextMode.value === 'repertorio') {
+            return currentPlayingIndex.value;
+          }
+          // Para búsqueda o géneros, seguimos buscando por ID normalmente
           return currentContextList.value.findIndex(id => String(id) === String(activeSong.value.id));
         });
 
         const prevSongData = computed(() => {
           const idx = activeSongIndexInContext.value;
           if (idx > 0) {
-            const prevId = currentContextList.value[idx - 1];
+            const prevId = currentContextList.value[idx - 1]; // ⬅️ Aquí va el - 1
             return songs.value.find(s => String(s.id) === String(prevId));
           }
           return null;
@@ -1535,13 +1540,13 @@
 
         const nextSongData = computed(() => {
           const idx = activeSongIndexInContext.value;
-          if (idx >= 0 && idx < currentContextList.value.length - 1) {
+          if (idx >= 0 && idx < currentContextList.value.length - 1) { // ⬅️ Aquí también va el - 1
             const nextId = currentContextList.value[idx + 1];
             return songs.value.find(s => String(s.id) === String(nextId));
           }
           return null;
         });
-
+        
         function contarCancionesPorGenero(gen) {
           if (!songs.value) return 0;
           return songs.value.filter(s => s && s.genero && s.genero.toUpperCase() === gen.toUpperCase()).length;
@@ -1924,22 +1929,40 @@
           if (song) playSong(song, 'lista_genero');
         }
 
+        // Variable para recordar en qué renglón exacto vamos
+        const currentPlayingIndex = ref(-1);
+
         function playFromRepertory(index) {
           const repSongs = repertorios.value[activeRepertorio.value]?.canciones || [];
           const songId = repSongs[index];
           const song = songs.value.find(s => String(s.id) === String(songId));
-          if (song) playSong(song, 'repertorio');
+          if (song) {
+            currentPlayingIndex.value = index; // Guardamos el renglón exacto
+            playSong(song, 'repertorio');
+          }
         }
 
         function navegarCancionContexto(direction) {
-          const list = currentContextList.value;
-          const currentIdx = activeSongIndexInContext.value;
-          if (currentIdx === -1) return;
-          const nextIdx = currentIdx + direction;
-          if (nextIdx >= 0 && nextIdx < list.length) {
-            const nextId = list[nextIdx];
-            const song = songs.value.find(s => String(s.id) === String(nextId));
-            if (song) playSong(song, activeContextMode.value);
+          if (activeContextMode.value === 'repertorio') {
+            const repSongs = repertorios.value[activeRepertorio.value]?.canciones || [];
+            const nextIdx = currentPlayingIndex.value + direction;
+            
+            if (nextIdx >= 0 && nextIdx < repSongs.length) {
+              currentPlayingIndex.value = nextIdx;
+              const nextId = repSongs[nextIdx];
+              const song = songs.value.find(s => String(s.id) === String(nextId));
+              if (song) playSong(song, 'repertorio');
+            }
+          } else {
+            const list = currentContextList.value;
+            const currentIdx = activeSongIndexInContext.value;
+            if (currentIdx === -1) return;
+            const nextIdx = currentIdx + direction;
+            if (nextIdx >= 0 && nextIdx < list.length) {
+              const nextId = list[nextIdx];
+              const song = songs.value.find(s => String(s.id) === String(nextId));
+              if (song) playSong(song, activeContextMode.value);
+            }
           }
         }
 
