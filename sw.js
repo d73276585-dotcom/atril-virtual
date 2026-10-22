@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atril-cache-v42'; // <-- Incrementar siempre al publicar cambios
+const CACHE_NAME = 'atril-cache-v43'; // <-- Incrementar siempre al publicar cambios
 
 const PRECACHE_ASSETS = [
   './',
