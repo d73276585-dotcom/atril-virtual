@@ -543,26 +543,36 @@
             <i class="fa-solid fa-folder-open text-3xl opacity-20"></i>
             <span>No hay canciones en este repertorio.</span>
           </div>
-          <div v-else-if="repertorios[activeRepertorio]" v-sortable="{ handle: '.drag-handle', animation: 150, onEnd: (e) => onReorderEnd(e, 'repertorio_detalle') }" class="flex-1 overflow-y-auto space-y-1.5 pr-1 pb-10 relative z-0">
-            <div v-for="(songId, idx) in repertorios[activeRepertorio].canciones" :key="songId + '_' + idx" class="p-2 sm:p-2.5 bg-slate-900 border border-slate-800/80 rounded-xl flex items-center justify-between group shadow gap-2">
+         <div v-else-if="repertorios[activeRepertorio]" v-sortable="{ handle: '.drag-handle', animation: 150, onEnd: (e) => onReorderEnd(e, 'repertorio_detalle') }" class="flex-1 overflow-y-auto space-y-1.5 pr-1 pb-10 relative z-0">
+            <div v-for="(songId, idx) in repertorios[activeRepertorio].canciones" :key="songId + '_' + idx" :class="['p-2 sm:p-2.5 border rounded-xl flex items-center justify-between group shadow gap-2 transition-all', getItemColorClass(activeRepertorio, idx)]">
+              
+              <!-- Izquierda: Arrastre, Número, ID y Título de la canción -->
               <div class="flex items-center gap-2 cursor-pointer flex-1 min-w-0" @click="playFromRepertory(idx)">
                 <i v-if="userRole === 'admin'" class="fa-solid fa-grip-lines text-slate-600 hover:text-slate-400 cursor-grab drag-handle active:cursor-grabbing text-base px-1" @click.stop></i>
                 <span class="text-[11px] font-mono font-bold text-slate-500 w-4">{{ idx + 1 }}.</span>
-                 <span class="bg-blue-950 text-blue-400 font-mono text-[9px] px-1.5 py-0.5 rounded border border-blue-800/60">#{{ songId }}</span>
+                <span class="bg-blue-950 text-blue-400 font-mono text-[9px] px-1.5 py-0.5 rounded border border-blue-800/60">#{{ songId }}</span>
                 <div class="truncate">
                   <h4 class="text-xs sm:text-sm font-bold text-white group-hover:text-emerald-400 transition truncate">{{ getSongTitle(songId) }}</h4>
                   <div class="text-[9px] text-slate-400 flex items-center gap-1 flex-wrap">
-                     <span>Orig: <strong class="text-blue-400">{{ getSongKeyAndModality(songId) }}</strong></span>
+                    <span>Orig: <strong class="text-blue-400">{{ getSongKeyAndModality(songId) }}</strong></span>
                     <span v-if="getSingerKeyDisplay(songId, true)" class="flex items-center gap-0.5">
                       <i class="fa-solid fa-arrow-right text-[7px] text-slate-600"></i>
                       <i class="fa-solid fa-microphone text-[8px] text-indigo-400"></i>
-                       <strong class="text-indigo-400">{{ getSingerKeyDisplay(songId, true) }}</strong>
+                      <strong class="text-indigo-400">{{ getSingerKeyDisplay(songId, true) }}</strong>
                     </span>
                   </div>
                 </div>
               </div>
-              
-               <div class="flex items-center gap-1 flex-shrink-0">
+
+              <!-- Derecha: Paleta de colores + Selector de Cantante + Botón Eliminar -->
+              <div class="flex items-center gap-1 flex-shrink-0">
+                
+                <!-- ⬇️ AQUÍ AGREGAS EL v-if="userRole === 'admin'" EN EL BOTÓN DE LA PALETA ⬇️ -->
+                <button v-if="userRole === 'admin'" @click.stop="ciclarColorItem(activeRepertorio, idx)" class="text-slate-500 hover:text-emerald-400 p-1.5 transition rounded-lg hover:bg-slate-800/60" title="Cambiar color de mix">
+                  <i class="fa-solid fa-palette text-xs"></i>
+                </button>
+
+                <!-- Selector de Cantante -->
                 <div class="flex items-center gap-1 bg-slate-950 px-1.5 py-0.5 rounded-lg border border-slate-800">
                   <i class="fa-solid fa-user text-[8px] text-indigo-400"></i>
                   <button v-if="userRole === 'admin'" @click.stop="openSingerSelect('repertorio_cancion', songId, getSongSinger(songId, true))" class="bg-transparent text-[10px] font-bold text-slate-300 focus:outline-none w-16 sm:w-20 flex justify-between items-center text-left hover:bg-slate-800 px-1 py-0.5 rounded">
@@ -571,8 +581,13 @@
                   </button>
                   <span v-else class="text-[10px] font-bold text-slate-300 w-16 sm:w-20 truncate">{{ getSongSinger(songId, true) || 'Gen' }}</span>
                 </div>
-                <button v-if="userRole === 'admin'" @click.stop="removerCancionDeRepertorio(songId)" class="p-1 bg-rose-900/30 hover:bg-rose-900 text-rose-300 rounded-lg text-xs transition"><i class="fa-solid fa-trash text-[10px]"></i></button>
+
+                <!-- Botón Eliminar -->
+                <button v-if="userRole === 'admin'" @click.stop="removerCancionDeRepertorio(songId)" class="p-1 bg-rose-900/30 hover:bg-rose-900 text-rose-300 rounded-lg text-xs transition">
+                  <i class="fa-solid fa-trash text-[10px]"></i>
+                </button>
               </div>
+
             </div>
           </div>
         </div>
@@ -651,7 +666,7 @@
   </div>
 
   <script>
-    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwQjGhUbPZgNeJDxc60Y6R5bBeA3Y2Y68rvyl2dRle0WqbbUooczAtaPUQx44r4akg/exec";
+    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwBkxwW-wg_A_he2ADhx1XyXSeUzDQ6kszBHekvuj7GKePmUkvcAhX5CO1_rjvhprhR/exec";
     
     function safeGetLocal(key, def = null) {
       try { return localStorage.getItem(key) || def; } catch (e) { return def; }
@@ -911,17 +926,16 @@
           'DO': 'C', 'RE': 'D', 'MI': 'E', 'FA': 'F', 'SOL': 'G', 'LA': 'A', 'SI': 'B'
         };
 
+// ==========================================
+        // 1. RESTAURACIÓN OFFLINE (Blindada para no alterar la vista actual)
         // ==========================================
-        // 1. RESTAURACIÓN OFFLINE (Corregidas claves)
-        // ==========================================
-        function restaurarSesionLocal() {
+        function restaurarSesionLocal(cambiarVista = true) {
           console.log("🔍 Verificando sesión local...");
   
           const pinGuardado = safeGetLocal('atril_saved_pin');
           const savedUser = safeGetLocal('atril_current_user');
           const savedRole = safeGetLocal('atril_user_role');
   
-          // Acepta tanto '_cache' como '_data' para no perder compatibilidad
           const cachedSongs = safeGetLocal('atril_songs_cache') || safeGetLocal('atril_songs_data');
           const cachedReps = safeGetLocal('atril_repertorios_cache') || safeGetLocal('atril_repertorios_data');
           const cachedUsers = safeGetLocal('atril_usuarios_data');
@@ -930,7 +944,6 @@
           if (cachedReps) { try { repertorios.value = JSON.parse(cachedReps); } catch(e){} }
           if (cachedUsers) { try { usuarios.value = JSON.parse(cachedUsers); } catch(e){} }
 
-          // SI SE ENCONTRARON CANCIONES, DESACTIVA LA PANTALLA DE CARGA DE INMEDIATO
           if (songs.value && songs.value.length > 0) {
             isLoading.value = false;
           }
@@ -946,8 +959,11 @@
               if (u) userRole.value = u.rol;
             }
 
-            currentView.value = 'generos';
-            window.history.replaceState({ view: 'generos' }, '');
+            // SOLO cambia la vista si se indica explícitamente (al arrancar la app)
+            if (cambiarVista && (currentView.value === 'login' || !currentView.value)) {
+              currentView.value = 'generos';
+              window.history.replaceState({ view: 'generos' }, '');
+            }
     
             isLoading.value = false;
             syncing.value = false;
@@ -955,8 +971,10 @@
           } else {
             console.warn("⚠️ No se encontró PIN guardado en localStorage.");
             isLoggedIn.value = false;
-            currentView.value = 'login';
-            window.history.replaceState({ view: 'login' }, '');
+            if (cambiarVista) {
+              currentView.value = 'login';
+              window.history.replaceState({ view: 'login' }, '');
+            }
             isLoading.value = false;
             syncing.value = false;
             return false;
@@ -964,26 +982,23 @@
         }
 
         // ==========================================
-        // 2. ARRANQUE AUTOMÁTICO
+        // 2. ARRANQUE AUTOMÁTICO (Sin llamadas duplicadas)
         // ==========================================
         function inicializarApp() {
           console.log("🎬 Inicializando aplicación...");
   
-          // 1. Carga datos guardados
-          restaurarSesionLocal();
+          // 1. Carga datos guardados localmente
+          restaurarSesionLocal(true);
 
-          // 2. Si ya hay canciones, APAGA la pantalla de carga inmediatamente
+          // 2. Carga inteligente sin duplicar peticiones
           if (songs.value && songs.value.length > 0) {
             isLoading.value = false;
             syncing.value = false;
+            if (navigator.onLine) {
+              recargarDatos(true); // Sincronización silenciosa en segundo plano
+            }
           } else {
-            // SOLO si la app está 100% vacía (sin nada en memoria), descarga de la nube
-            recargarDatos(false);
-          }
-
-          // AUTOMÁTICO: Si hay internet, busca canciones nuevas en la nube silenciosamente en segundo plano
-          if (navigator.onLine) {
-            recargarDatos(true);
+            recargarDatos(false); // Carga obligatoria si no hay datos
           }
         }
 
@@ -1043,7 +1058,7 @@
         }
 
         // ==========================================
-        // 4. RECARGA DE DATOS Y SINCRONIZACIÓN
+        // 4. RECARGA DE DATOS Y SINCRONIZACIÓN (Segura frente a fallos de red)
         // ==========================================
         async function recargarDatos(esSilencioso = false) {
           if (typeof esSilencioso !== 'boolean') esSilencioso = false;
@@ -1052,10 +1067,9 @@
           try {
             const data = await runGas('getInitialData', !esSilencioso);
 
-            // Validación estricta de la respuesta recibida
             if (data && typeof data === 'object' && !data.error) {
               
-              // 1. Guardar canciones en memoria y almacenamiento local
+              // 1. Guardar canciones
               const cancionesObtenidas = data.songs || data.canciones;
               if (Array.isArray(cancionesObtenidas) && cancionesObtenidas.length > 0) {
                 songs.value = cancionesObtenidas;
@@ -1063,23 +1077,16 @@
                 safeSetLocal('atril_songs_data', JSON.stringify(songs.value));
               }
 
-              // 2. Guardar repertorios (con soporte inteligente por si vienen como texto JSON o objeto)
+              // 2. Guardar repertorios y cantantes individuales
               let repsData = data.repertorios;
               if (typeof repsData === 'string') {
-                try {
-                  repsData = JSON.parse(repsData);
-                } catch (e) {
-                  console.error("Error al parsear repertorios desde la nube:", e);
-                }
+                try { repsData = JSON.parse(repsData); } catch (e) {}
               }
               if (repsData && typeof repsData === 'object') {
                 repertorios.value = repsData;
                 safeSetLocal('atril_repertorios_cache', JSON.stringify(repsData));
                 safeSetLocal('atril_repertorios_data', JSON.stringify(repsData));
 
-                // --- ¡AQUÍ ESTÁ LA SOLUCIÓN CLAVE! ---
-                // Si el celular ya tiene un repertorio abierto en pantalla, 
-                // refrescamos los cantantes en tiempo real con los datos recién bajados de la nube:
                 if (activeRepertorio.value && repertorios.value[activeRepertorio.value]) {
                   const repActivo = repertorios.value[activeRepertorio.value];
                   if (!repActivo.cantantesCanciones) {
@@ -1089,45 +1096,24 @@
                 }
               }
 
-              // 3. Respetar el orden exacto de ritmos definido en Google Sheets
+              // 3. Ritmos
               if (data.ritmosOrder && Array.isArray(data.ritmosOrder)) {
                 customRitmoOrder.value = data.ritmosOrder;
                 if (typeof ritmosOrder !== 'undefined') ritmosOrder.value = data.ritmosOrder;
                 safeSetLocal('atril_ritmo_order', JSON.stringify(data.ritmosOrder));
               }
 
-              // 4. Validación de usuarios y permisos de acceso
+              // 4. Validación de usuarios (SIN expulsar al usuario si hay un fallo temporal)
               if (Array.isArray(data.usuarios) && data.usuarios.length > 0) {
                 usuarios.value = data.usuarios;
                 safeSetLocal('atril_usuarios_data', JSON.stringify(data.usuarios));
-
-                const pinGuardado = safeGetLocal('atril_saved_pin');
-
-                if (pinGuardado) {
-                  const userStillValid = data.usuarios.find(
-                    u => String(u.pin).trim() === String(pinGuardado).trim()
-                  );
-
-                  if (userStillValid) {
-                    isLoggedIn.value = true;
-                    userRole.value = userStillValid.rol;
-                    currentUserName.value = userStillValid.nombre;
-                    safeSetLocal('atril_current_user', userStillValid.nombre);
-                  } else {
-                    logout();
-                    loginError.value = "Tu acceso ha sido revocado o el PIN ya no es válido.";
-                  }
-                }
               }
             } else {
-              console.warn("Respuesta de la nube no válida o con error. Usando respaldo local.");
-              restaurarSesionLocal();
+              console.warn("Respuesta de la nube no válida. Se mantiene el estado local actual sin alterar la vista.");
             }
           } catch (err) {
             console.warn("Error de red / Modo Offline activo:", err);
-            restaurarSesionLocal();
           } finally {
-            // Apagado garantizado de indicadores de carga y sincronización
             syncing.value = false;
             isLoading.value = false;
           }
@@ -1143,7 +1129,6 @@
             queue = [];
           }
 
-          // Filtrar y eliminar lecturas como 'getInitialData' de la cola de guardado
           queue = queue.filter(item => item && item.action && item.action !== 'getInitialData');
 
           if (queue.length > 0) {
@@ -1156,7 +1141,7 @@
                 await runGas(item.action, ...args);
               } catch (e) {
                 console.error(`Error sincronizando la acción ${item.action}:`, e);
-                remainingQueue.push(item); // Conservar elementos que fallaron para reintentar luego
+                remainingQueue.push(item);
               }
             }
 
@@ -1411,14 +1396,14 @@
           // 7. Sincronización en segundo plano al recuperar red
           window.addEventListener('online', () => { 
             procesarSincronizacion(); 
-            recargarDatos(true); // <-- Trae las canciones nuevas automáticamente al reconectarse
+            recargarDatos(true);
           });
 
           if (navigator.onLine) {
             procesarSincronizacion();
           }
         });
-
+        
         // ==========================================
         // 7. PROPIEDADES COMPUTADAS Y AUXILIARES
         // ==========================================
@@ -1514,9 +1499,8 @@
         const filteredAvailableForRep = computed(() => {
           if (!repSearchTerm.value) return [];
           const q = repSearchTerm.value.toLowerCase();
-          const currentRepSongs = repertorios.value[activeRepertorio.value]?.canciones || [];
           return (songs.value || []).filter(s => 
-            s && !currentRepSongs.includes(s.id) &&
+            s &&
             ((s.titulo && s.titulo.toLowerCase().includes(q)) || String(s.id).includes(q))
           ).slice(0, 8);
         });
@@ -1616,13 +1600,16 @@
 
         function agregarCancionARepertorio(songId) {
           const rep = repertorios.value[activeRepertorio.value];
-          if (rep && !rep.canciones.includes(songId)) {
-            rep.canciones.push(songId);
+          if (rep) {
+            if (!Array.isArray(rep.canciones)) {
+              rep.canciones = [];
+            }
+            rep.canciones.push(songId); // Ahora permite duplicados sin restricciones
             repSearchTerm.value = '';
             guardarRepertoriosEnNube();
           }
         }
-
+        
         function removerCancionDeRepertorio(songId) {
           const rep = repertorios.value[activeRepertorio.value];
           if (rep) {
@@ -2454,6 +2441,52 @@
             runGas('saveSongData', songs.value[sIdx], activeSong.value.id).finally(() => { syncing.value = false; });
           }
         }
+        // 1. Pones las funciones y la lista AQUÍ (antes del return)
+        // 1. Paleta ampliada de 8 colores (incluye Rojo, Cian y Fucsia)
+        const availableMixColors = [
+          'bg-slate-900 border-slate-800/80 text-white',                           // 0: Normal (Sin color)
+          'bg-blue-950/70 border-blue-600/80 text-white shadow-blue-900/20',      // 1: Mix Azul
+          'bg-emerald-950/70 border-emerald-600/80 text-white shadow-emerald-900/20', // 2: Mix Verde
+          'bg-purple-950/70 border-purple-600/80 text-white shadow-purple-900/20', // 3: Mix Morado
+          'bg-amber-950/70 border-amber-600/80 text-white shadow-amber-900/20',    // 4: Mix Dorado/Naranja
+          'bg-rose-950/70 border-rose-600/80 text-white shadow-rose-900/20',       // 5: Mix Rojo/Rosado
+          'bg-cyan-950/70 border-cyan-600/80 text-white shadow-cyan-900/20',       // 6: Mix Cian/Celeste
+          'bg-fuchsia-950/70 border-fuchsia-600/80 text-white shadow-fuchsia-900/20' // 7: Mix Fucsia
+        ];
+
+        // Variable para controlar el tiempo de espera (debounce)
+        let saveRepertorioTimeout = null;
+
+        function getItemColorClass(repId, idx) {
+          const rep = repertorios.value[repId];
+          if (rep && rep.colores && rep.colores[idx]) {
+            return rep.colores[idx];
+          }
+          return availableMixColors[0];
+        }
+
+        function ciclarColorItem(repId, idx) {
+          const rep = repertorios.value[repId];
+          if (!rep) return;
+          if (!rep.colores) rep.colores = {};
+  
+          const currentColor = rep.colores[idx] || availableMixColors[0];
+          const currentIndex = availableMixColors.indexOf(currentColor);
+          const nextIndex = (currentIndex === -1) ? 1 : (currentIndex + 1) % availableMixColors.length;
+  
+          if (nextIndex === 0) {
+            delete rep.colores[idx];
+          } else {
+            rep.colores[idx] = availableMixColors[nextIndex];
+          }
+  
+          // --- MARGEN DE ESPERA DE 3 SEGUNDOS ANTES DE GUARDAR EN LA NUBE ---
+          clearTimeout(saveRepertorioTimeout);
+          saveRepertorioTimeout = setTimeout(() => {
+            guardarRepertoriosEnNube();
+          }, 3000);
+        }
+
 
         return {
           // Autenticación por PIN y Usuario
@@ -2485,7 +2518,8 @@
           guardarCancion, eliminarCancion, confirmarEliminarCancion, saveEditorState, undo,
           redo, aplicarNegrita, applyColor, updateEditorFormattingState, onContentEditableInput,
           handleKeydown, handlePaste, abrirModalTonosCantante, guardarTonoCantante,
-          aplicarTonoCantante, eliminarTonoCantante, handleEnter
+          aplicarTonoCantante, eliminarTonoCantante, handleEnter, getItemColorClass, ciclarColorItem
+  
         };
       }
     });
