@@ -559,8 +559,8 @@
           </div>
 
           <!-- Lista de Canciones del Repertorio -->
-         <div v-else-if="repertorios[activeRepertorio]" v-sortable="{ handle: '.drag-handle', animation: 150, onEnd: (e) => onReorderEnd(e, 'repertorio_detalle') }" class="flex-1 overflow-y-auto space-y-1.5 pr-1 pb-10 relative z-0">
-            <div v-for="(songId, idx) in repertorios[activeRepertorio].canciones" :key="songId + '_' + idx" :class="['p-2 sm:p-2.5 border rounded-xl flex items-center justify-between group shadow gap-2 transition-all', getItemColorClass(activeRepertorio, idx)]">
+          <div v-else-if="repertorios[activeRepertorio]" v-sortable="{ handle: '.drag-handle', animation: 150, onEnd: (e) => onReorderEnd(e, 'repertorio_detalle') }" class="flex-1 overflow-y-auto space-y-1.5 pr-1 pb-10 relative z-0">
+            <div v-for="(songId, idx) in repertorios[activeRepertorio].canciones" :key="songId + '_' + idx" :class="['p-2 sm:p-2.5 border rounded-xl flex items-center justify-between group shadow gap-2 transition-all', getItemColorClass(activeRepertorio, songId)]">
               
               <!-- Izquierda: Arrastre, Número, ID y Título de la canción -->
               <div class="flex items-center gap-2 cursor-pointer flex-1 min-w-0" @click="playFromRepertory(idx)">
@@ -590,7 +590,8 @@
 
               <!-- Derecha: Paleta de colores + Selector de Cantante + Botón Eliminar -->
               <div class="flex items-center gap-1 flex-shrink-0">
-                <button v-if="isAdminActive" @click.stop="ciclarColorItem(activeRepertorio, idx)" class="text-slate-500 hover:text-emerald-400 p-1.5 transition rounded-lg hover:bg-slate-800/60" title="Cambiar color de mix">
+                <!-- AQUÍ CAMBIAMOS idx POR songId -->
+                <button v-if="isAdminActive" @click.stop="ciclarColorItem(activeRepertorio, songId)" class="text-slate-500 hover:text-emerald-400 p-1.5 transition rounded-lg hover:bg-slate-800/60" title="Cambiar color de mix">
                   <i class="fa-solid fa-palette text-xs"></i>
                 </button>
 
@@ -603,7 +604,7 @@
                   <span v-else class="text-[10px] font-bold text-slate-300 w-16 sm:w-20 truncate">{{ getSongSinger(songId, true) || 'Gen' }}</span>
                 </div>
 
-                <button v-if="isAdminActive" @click.stop="removerCancionDeRepertorio(songId)" class="p-1 bg-rose-900/30 hover:bg-rose-900 text-rose-300 rounded-lg text-xs transition">
+                <button v-if="isAdminActive" @click.stop="removerCancionDeRepertorio(idx)" class="p-1 bg-rose-900/30 hover:bg-rose-900 text-rose-300 rounded-lg text-xs transition">
                   <i class="fa-solid fa-trash text-[10px]"></i>
                 </button>
               </div>
@@ -1661,10 +1662,19 @@
           }
         }
 
-        function guardarRepertoriosEnNube() {
+        async function guardarRepertoriosEnNube() {
+          // 1. Tu guardado local de siempre (asegura que la UI nunca pierda datos)
           safeSetLocal('atril_repertorios_data', JSON.stringify(repertorios.value));
+  
           syncing.value = true;
-          runGas('saveRepertorios', repertorios.value).finally(() => { syncing.value = false; });
+  
+          try {
+            // 2. Usamos nuestra cola inteligente para enviar a la nube (o encolar si estás offline)
+            await ejecutarOEncolar('saveRepertorios', repertorios.value);
+          } finally {
+            // 3. Apagamos el indicador de sincronización pase lo que pase
+            syncing.value = false;
+          }
         }
 
         function agregarCancionARepertorio(songId) {
@@ -1679,23 +1689,37 @@
           }
         }
         
-        function removerCancionDeRepertorio(songId) {
+        function removerCancionDeRepertorio(idx) {
           const rep = repertorios.value[activeRepertorio.value];
-          if (rep) {
-            // 1. Quita la canción de la lista
-            rep.canciones = rep.canciones.filter(id => String(id) !== String(songId));
-            
-            // 2. Limpia el cantante asignado a esta canción para que no quede rastro
+          if (!rep || !rep.canciones) return;
+
+          // Obtenemos el ID de la canción que está en esta posición exacta
+          const songId = rep.canciones[idx];
+
+          // 1. Quitamos únicamente el elemento de esa posición específica
+          rep.canciones.splice(idx, 1);
+          
+          // 2. Verificamos si la canción todavía existe en otra parte del repertorio
+          const sigueExistiendo = rep.canciones.includes(songId);
+
+          // Si ya no queda ninguna copia en el repertorio, limpiamos sus datos adicionales
+          if (!sigueExistiendo) {
+            if (rep.colores && rep.colores[songId]) {
+              delete rep.colores[songId];
+            }
             if (rep.cantantesCanciones && rep.cantantesCanciones[songId]) {
               delete rep.cantantesCanciones[songId];
             }
             if (songSingerOverrides.value[songId]) {
               delete songSingerOverrides.value[songId];
             }
-            
-            // 3. Guarda los cambios limpios en la nube
-            guardarRepertoriosEnNube();
           }
+          
+          // 3. Guarda los cambios en la nube con el tiempo de espera
+          clearTimeout(saveRepertorioTimeout);
+          saveRepertorioTimeout = setTimeout(() => {
+            guardarRepertoriosEnNube();
+          }, 3000);
         }
 
         function translateChord(chord) {
@@ -2544,29 +2568,30 @@
         // Variable para controlar el tiempo de espera (debounce)
         let saveRepertorioTimeout = null;
 
-        function getItemColorClass(repId, idx) {
+        // Ahora usamos el id único de la canción en lugar del índice numérico (idx)
+        function getItemColorClass(repId, songId) {
           const rep = repertorios.value[repId];
-          if (rep && rep.colores && rep.colores[idx]) {
-            return rep.colores[idx];
+          if (rep && rep.colores && rep.colores[songId]) {
+            return rep.colores[songId];
           }
           return availableMixColors[0];
         }
 
-        function ciclarColorItem(repId, idx) {
+        function ciclarColorItem(repId, songId) {
           const rep = repertorios.value[repId];
           if (!rep) return;
           if (!rep.colores) rep.colores = {};
-  
-          const currentColor = rep.colores[idx] || availableMixColors[0];
+ 
+          const currentColor = rep.colores[songId] || availableMixColors[0];
           const currentIndex = availableMixColors.indexOf(currentColor);
           const nextIndex = (currentIndex === -1) ? 1 : (currentIndex + 1) % availableMixColors.length;
-  
+ 
           if (nextIndex === 0) {
-            delete rep.colores[idx];
+            delete rep.colores[songId];
           } else {
-            rep.colores[idx] = availableMixColors[nextIndex];
+            rep.colores[songId] = availableMixColors[nextIndex];
           }
-  
+ 
           // --- MARGEN DE ESPERA DE 3 SEGUNDOS ANTES DE GUARDAR EN LA NUBE ---
           clearTimeout(saveRepertorioTimeout);
           saveRepertorioTimeout = setTimeout(() => {
@@ -2574,7 +2599,58 @@
           }, 3000);
         }
 
+        // ==========================================
+        // SISTEMA DE COLA OFFLINE (NUEVO)
+        // ==========================================
+        const QUEUE_KEY = 'atril_pending_actions_queue';
 
+        async function ejecutarOEncolar(actionName, payload) {
+          if (!navigator.onLine) {
+            let queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+            queue.push({ action: actionName, payload, timestamp: Date.now() });
+            safeSetLocal(QUEUE_KEY, JSON.stringify(queue));
+            console.log(`[Modo Offline] Acción '${actionName}' guardada localmente.`);
+            return { success: true, offline: true };
+          }
+
+          try {
+            const resultado = await runGas(actionName, payload);
+            procesarColaPendiente();
+            return resultado;
+          } catch (error) {
+            console.error(`[Error de red] Falló el envío de '${actionName}'. Guardando en cola local:`, error);
+            let queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+            safeSetLocal(QUEUE_KEY, JSON.stringify(queue));
+            return { success: true, offline: true };
+          }
+        }
+
+        async function procesarColaPendiente() {
+          if (!navigator.onLine) return;
+  
+          let queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+          if (queue.length === 0) return;
+
+          console.log(`Sincronizando ${queue.length} acciones pendientes con la nube...`);
+
+          while (queue.length > 0) {
+            const item = queue[0];
+            try {
+              await runGas(item.action, item.payload);
+              queue.shift();
+              safeSetLocal(QUEUE_KEY, JSON.stringify(queue));
+            } catch (error) {
+              console.error("No se pudo sincronizar un elemento pendiente, se reintentará después:", error);
+              break; 
+            }
+          }
+        }
+
+        // Escucha automática cuando regresa el internet
+        window.addEventListener('online', () => {
+          console.log("¡Conexión a internet recuperada!");
+          procesarColaPendiente();
+        });
         return {
           // Autenticación por PIN y Usuario
           isLoggedIn, userRole, pinIngresado, usuarios, currentUserName, isCheckingPass, loginError, loginPin, logout, musicianViewMode, isAdminActive,
