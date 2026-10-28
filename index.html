@@ -1725,32 +1725,35 @@
         }
 
        async function guardarRepertoriosEnNube() {
-        // 🛡️ ESCUDO DE SEGURIDAD: Evitamos guardar si no hay repertorios válidos
-        if (!repertorios.value || Object.keys(repertorios.value).length === 0) {
-          console.warn("⚠️ Guardado bloqueado: repertorios vacíos.");
-          return;
-        }
+         // 🛡️ ESCUDO DE SEGURIDAD: Evitamos guardar si no hay repertorios válidos
+         if (!repertorios.value || Object.keys(repertorios.value).length === 0) {
+           console.warn("⚠️ Guardado bloqueado: repertorios vacíos.");
+           return;
+         }
 
-        // 1. Guardado local inmediato para que la app no pierda nada visualmente
-        safeSetLocal('atril_repertorios_data', JSON.stringify(repertorios.value));
-        safeSetLocal('atril_singer_overrides', JSON.stringify(songSingerOverrides.value));
+         // 1. Guardado local inmediato para que la app no pierda nada visualmente en la interfaz
+         safeSetLocal('atril_repertorios_data', JSON.stringify(repertorios.value));
+         safeSetLocal('atril_singer_overrides', JSON.stringify(songSingerOverrides.value));
 
-        // 2. SI NO HAY INTERNET: Guardamos directamente en la cola offline de forma explícita
-        if (!navigator.onLine) {
-          try {
-            const queue = JSON.parse(localStorage.getItem('atril_offline_queue') || '[]');
-            queue.push({ 
-              action: 'saveRepertorios', 
-              payload: [repertorios.value], 
-              timestamp: Date.now() 
-           });
-            localStorage.setItem('atril_offline_queue', JSON.stringify(queue));
-            console.log("💾 ¡ÉXITO! Cambio forzado y guardado en atril_offline_queue.");
-          } catch (e) {
-            console.error("❌ Error al guardar en la cola offline:", e);
-          }
-          return; // Salimos para evitar que intente hacer fetch a la red
-        }
+         // 2. Envío a la nube o encolado automático si el móvil no tiene internet real
+         syncing.value = true;
+         try {
+           // 'ejecutarOEncolar' intentará hacer el fetch a GAS. Si el móvil miente 
+           // y dice que está online pero no hay red, el catch atrapará el error 
+           // y lo mandará automáticamente a 'atril_pending_actions_queue'.
+           const resultado = await ejecutarOEncolar('saveRepertorios', { repertoriosObj: repertorios.value });
+    
+           if (resultado && resultado.offline) {
+             console.log("💾 Sin red real detectada: Cambio guardado en la cola offline del móvil.");
+           } else {
+             console.log("☁️ Repertorio guardado y sincronizado en la nube con éxito.");
+           }
+         } catch (err) {
+           console.error("❌ Error al procesar el guardado del repertorio:", err);
+         } finally {
+           syncing.value = false;
+         }
+       }
 
         // 3. SI HAY INTERNET: Enviamos normalmente a la nube
         syncing.value = true;
