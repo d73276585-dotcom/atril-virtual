@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atril-cache-v47'; // <-- Incrementar siempre al publicar cambios
+const CACHE_NAME = 'atril-cache-v48'; // Incrementado para forzar actualización
 
 const PRECACHE_ASSETS = [
   './',
@@ -6,14 +6,18 @@ const PRECACHE_ASSETS = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
-  'https://cdn.tailwindcss.com'
+  'https://cdn.tailwindcss.com',
+  'https://unpkg.com/vue@3/dist/vue.global.js',
+  'https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;600;700&display=swap'
 ];
 
 // 1. INSTALACIÓN
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      console.log('[SW] Guardando recursos en caché ' + CACHE_NAME + '...');
+      console.log('[SW] Guardando recursos esenciales en caché ' + CACHE_NAME + '...');
       for (const asset of PRECACHE_ASSETS) {
         try {
           const req = new Request(asset, { mode: asset.startsWith('http') ? 'no-cors' : 'cors' });
@@ -22,36 +26,37 @@ self.addEventListener('install', (event) => {
             await cache.put(asset, res);
           }
         } catch (err) {
-          console.warn('[SW] No se pudo guardar en precaché:', asset, err);
+          console.warn('[SW] No se pudo precachear:', asset, err);
         }
       }
     })
   );
-  self.skipWaiting(); // Se instala e interrumpe la versión vieja inmediatamente
+  self.skipWaiting();
 });
 
-// 2. ACTIVACIÓN Y LIMPIEZA DE CACHÉ ANTIGUA
+// 2. ACTIVACIÓN Y LIMPIEZA DE CACHÉ OBSOLETA
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[SW] Borrando caché obsoleta:', key);
+            console.log('[SW] Eliminando caché antigua:', key);
             return caches.delete(key);
           }
         })
       );
     })
   );
-  self.clients.claim(); // Toma el control de la página de inmediato
+  self.clients.claim();
 });
 
 // 3. INTERCEPCIÓN DE RED
 self.addEventListener('fetch', (event) => {
+  // Ignorar peticiones que no sean GET (como el POST hacia Google Apps Script)
   if (event.request.method !== 'GET') return;
 
-  // Para navegación (Carga de la página index.html)
+  // Intercepción especial para la navegación principal
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
@@ -73,7 +78,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Para el resto de archivos (imágenes, scripts, estilos)
+  // Intercepción estándar de recursos (Network First / Cache Fallback)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
