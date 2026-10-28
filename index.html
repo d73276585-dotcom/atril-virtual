@@ -1735,12 +1735,9 @@
          safeSetLocal('atril_repertorios_data', JSON.stringify(repertorios.value));
          safeSetLocal('atril_singer_overrides', JSON.stringify(songSingerOverrides.value));
 
-         // 2. Envío a la nube o encolado automático si el móvil no tiene internet real
+         // 2. Envío a la nube o encolado automático robusto (funciona en PC y móviles)
          syncing.value = true;
          try {
-           // 'ejecutarOEncolar' intentará hacer el fetch a GAS. Si el móvil miente 
-           // y dice que está online pero no hay red, el catch atrapará el error 
-           // y lo mandará automáticamente a 'atril_pending_actions_queue'.
            const resultado = await ejecutarOEncolar('saveRepertorios', { repertoriosObj: repertorios.value });
     
            if (resultado && resultado.offline) {
@@ -1755,29 +1752,17 @@
          }
        }
 
-        // 3. SI HAY INTERNET: Enviamos normalmente a la nube
-        syncing.value = true;
-        try {
-          await runGas('saveRepertorios', repertorios.value);
-          console.log("☁️ Repertorio guardado en la nube con éxito.");
-        } catch (err) {
-          console.error("Error al guardar en la nube:", err);
-        } finally {
-          syncing.value = false;
-        }
-      }      
-
-        function agregarCancionARepertorio(songId) {
-          const rep = repertorios.value[activeRepertorio.value];
-          if (rep) {
-            if (!Array.isArray(rep.canciones)) {
-              rep.canciones = [];
-            }
-            rep.canciones.push(songId); // Ahora permite duplicados sin restricciones
-            repSearchTerm.value = '';
-            guardarRepertoriosEnNube();
-          }
-        }
+       function agregarCancionARepertorio(songId) {
+         const rep = repertorios.value[activeRepertorio.value];
+         if (rep) {
+           if (!Array.isArray(rep.canciones)) {
+             rep.canciones = [];
+           }
+           rep.canciones.push(songId); // Permite duplicados sin restricciones
+           repSearchTerm.value = '';
+           guardarRepertoriosEnNube();
+         }
+       }
         
         function removerCancionDeRepertorio(idx) {
           const rep = repertorios.value[activeRepertorio.value];
