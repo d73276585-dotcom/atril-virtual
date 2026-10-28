@@ -209,7 +209,7 @@
               <button @click="toggleChords" class="bg-amber-600/20 hover:bg-amber-600/40 border border-amber-500/40 text-amber-300 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1 min-h-[32px] sm:min-h-[34px] rounded-xl transition font-bold whitespace-nowrap shadow">
                 {{ showChords ? 'Ocultar' : 'Mostrar' }} Acordes
               </button>
-              <button @click="" class="bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/40 text-indigo-300 flex items-center justify-center min-w-[32px] min-h-[32px] sm:min-w-[34px] sm:min-h-[34px] rounded-xl text-xs transition shadow">
+              <button @click="abrirModalTonosCantante" class="bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/40 text-indigo-300 flex items-center justify-center min-w-[32px] min-h-[32px] sm:min-w-[34px] sm:min-h-[34px] rounded-xl text-xs transition shadow">
                 <i class="fa-solid fa-microphone"></i>
               </button>
              
@@ -652,8 +652,14 @@
             <option v-for="c in cantantesDisponibles" :key="c" :value="c">{{ c }}</option>
           </datalist>
           <div class="relative w-1/4">
-            <select v-model="nuevoCantanteTono" class="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 h-full w-full text-xs text-white outline-none focus:border-indigo-500 appearance-none cursor-pointer">
-              <option v-for="t in ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']" :key="t" :value="t">{{ translateChord(t) }}{{ activeSong.modalidad === 'MENOR' ? 'm' : '' }}</option>
+            <select v-model="nuevoCantanteTono" :class="!nuevoCantanteTono ? 'text-slate-400' : 'text-white'"             class="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 h-full w-full text-xs outline-none focus:border-indigo-500 appearance-none cursor-pointer">
+              <!-- Opción fantasma: muestra "TONO" en gris solo cuando está cerrado, pero se oculta o queda vacía en el menú -->
+              <option value="" disabled selected hidden>TONO</option>
+  
+              <!-- Opciones reales de tonos -->
+              <option v-for="t in ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']" :key="t" :value="t" class="text-white bg-slate-900">
+                {{ translateChord(t) }}{{ activeSong.modalidad === 'MENOR' ? 'm' : '' }}
+              </option>
             </select>
           </div>
           
