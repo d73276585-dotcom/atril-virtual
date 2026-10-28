@@ -691,7 +691,54 @@
   <script>
     const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwQjGhUbPZgNeJDxc60Y6R5bBeA3Y2Y68rvyl2dRle0WqbbUooczAtaPUQx44r4akg/exec";
     
-    function safeGetLocal(key, def = null) {
+    // ==========================================
+    // PROCESADOR AUTOMÁTICO DE LA COLA OFFLINE
+    // ==========================================
+    async function procesarColaOffline() {
+      if (!navigator.onLine) return;
+
+      const rawQueue = localStorage.getItem('atril_offline_queue');
+      if (!rawQueue) return;
+    
+      let queue = [];
+      try {
+        queue = JSON.parse(rawQueue);
+      } catch (e) {
+        return;
+      }
+
+      if (!Array.isArray(queue) || queue.length === 0) return;
+
+      console.log(`🚀 Sincronizando ${queue.length} acciones pendientes con la nube...`);
+  
+      // Procesamos ítem por ítem
+      const remainingQueue = [...queue];
+
+      while (remainingQueue.length > 0) {
+    const item = remainingQueue[0];
+        try {
+          // Ejecutamos la llamada a GAS con sus argumentos originales
+          await runGas(item.action, ...item.payload);
+          console.log(`✅ Acción '${item.action}' sincronizada correctamente.`);
+      
+          // Si tuvo éxito, lo removemos de la cola pendiente
+          remainingQueue.shift();
+          localStorage.setItem('atril_offline_queue', JSON.stringify(remainingQueue));
+        } catch (err) {
+          console.error(`❌ Error al sincronizar la acción '${item.action}':`, err);
+          // Si falla por red, detenemos el proceso para reintentar luego
+          break;
+        }
+      }
+    }
+
+    // Escucha automática de reconexión
+    window.addEventListener('online', () => {
+      console.log("🌐 Internet recuperado. Iniciando sincronización de cola...");
+      procesarColaOffline();
+    });
+
+        function safeGetLocal(key, def = null) {
       try { return localStorage.getItem(key) || def; } catch (e) { return def; }
     }
     
@@ -699,11 +746,26 @@
       try { localStorage.setItem(key, val); } catch (e) {}
     }
 
-    function encolarCambioLocal(action, payload) {
-      const queue = JSON.parse(safeGetLocal('atril_offline_queue', '[]'));
-      queue.push({ action, payload, timestamp: Date.now() });
-      safeSetLocal('atril_offline_queue', JSON.stringify(queue));
-    }
+   // 1. Encolado robusto que garantiza que el cambio no se pierda
+   function encolarCambioLocal(action, argsArray) {
+     try {
+       // Leemos la cola actual de localStorage
+       const queue = JSON.parse(localStorage.getItem('atril_offline_queue') || '[]');
+    
+      // Añadimos la acción pendiente con sus argumentos
+       queue.push({ 
+         action: action, 
+         payload: argsArray, 
+         timestamp: Date.now() 
+       });
+    
+       // Guardamos obligatoriamente en la clave correcta
+       localStorage.setItem('atril_offline_queue', JSON.stringify(queue));
+       console.log("💾 ¡Guardado exitoso en la cola offline (atril_offline_queue)!", action);
+     } catch (e) {
+       console.error("Error al encolar el cambio local:", e);
+     }
+   }
 
     const runGas = async (method, ...args) => {
       // Si está corriendo dentro del entorno nativo de Apps Script
@@ -718,9 +780,9 @@
 
       // Si no hay conexión a internet
       if (!navigator.onLine) {
-        encolarCambioLocal(method, args);
-        throw new Error("OFFLINE");
-      }
+          encolarCambioLocal(method, args);
+          throw new Error("OFFLINE");
+        }
 
       // Estructura del payload con soporte completo para PIN y Login
       const payload = { action: method };
@@ -953,7 +1015,7 @@
           'DO': 'C', 'RE': 'D', 'MI': 'E', 'FA': 'F', 'SOL': 'G', 'LA': 'A', 'SI': 'B'
         };
 
-// ==========================================
+        // ==========================================
         // 1. RESTAURACIÓN OFFLINE (Blindada para no alterar la vista actual)
         // ==========================================
         function restaurarSesionLocal(cambiarVista = true) {
@@ -1662,20 +1724,45 @@
           }
         }
 
-        async function guardarRepertoriosEnNube() {
-          // 1. Tu guardado local de siempre (asegura que la UI nunca pierda datos)
-          safeSetLocal('atril_repertorios_data', JSON.stringify(repertorios.value));
-  
-          syncing.value = true;
-  
-          try {
-            // 2. Usamos nuestra cola inteligente para enviar a la nube (o encolar si estás offline)
-            await ejecutarOEncolar('saveRepertorios', repertorios.value);
-          } finally {
-            // 3. Apagamos el indicador de sincronización pase lo que pase
-            syncing.value = false;
-          }
+       async function guardarRepertoriosEnNube() {
+        // 🛡️ ESCUDO DE SEGURIDAD: Evitamos guardar si no hay repertorios válidos
+        if (!repertorios.value || Object.keys(repertorios.value).length === 0) {
+          console.warn("⚠️ Guardado bloqueado: repertorios vacíos.");
+          return;
         }
+
+        // 1. Guardado local inmediato para que la app no pierda nada visualmente
+        safeSetLocal('atril_repertorios_data', JSON.stringify(repertorios.value));
+        safeSetLocal('atril_singer_overrides', JSON.stringify(songSingerOverrides.value));
+
+        // 2. SI NO HAY INTERNET: Guardamos directamente en la cola offline de forma explícita
+        if (!navigator.onLine) {
+          try {
+            const queue = JSON.parse(localStorage.getItem('atril_offline_queue') || '[]');
+            queue.push({ 
+              action: 'saveRepertorios', 
+              payload: [repertorios.value], 
+              timestamp: Date.now() 
+           });
+            localStorage.setItem('atril_offline_queue', JSON.stringify(queue));
+            console.log("💾 ¡ÉXITO! Cambio forzado y guardado en atril_offline_queue.");
+          } catch (e) {
+            console.error("❌ Error al guardar en la cola offline:", e);
+          }
+          return; // Salimos para evitar que intente hacer fetch a la red
+        }
+
+        // 3. SI HAY INTERNET: Enviamos normalmente a la nube
+        syncing.value = true;
+        try {
+          await runGas('saveRepertorios', repertorios.value);
+          console.log("☁️ Repertorio guardado en la nube con éxito.");
+        } catch (err) {
+          console.error("Error al guardar en la nube:", err);
+        } finally {
+          syncing.value = false;
+        }
+      }      
 
         function agregarCancionARepertorio(songId) {
           const rep = repertorios.value[activeRepertorio.value];
@@ -2512,8 +2599,8 @@
         }
 
         function abrirModalTonosCantante() {
-          nuevoCantanteNombre.value = globalActiveSinger.value || '';
-          nuevoCantanteTono.value = currentSongKey.value || 'C';
+          nuevoCantanteNombre.value = ''; // <--- Comienza vacío
+          nuevoCantanteTono.value = currentSongKey.value || ''; // (Opcional: puedes dejar el tono o vaciarlo también)
           showSingerModal.value = true;
         }
 
