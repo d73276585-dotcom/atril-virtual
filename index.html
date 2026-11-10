@@ -700,10 +700,12 @@
     // ==========================================
     // PROCESADOR AUTOMÁTICO DE LA COLA OFFLINE
     // ==========================================
+    const OFFLINE_QUEUE_KEY = 'atril_offline_queue';
+
     async function procesarColaOffline() {
       if (!navigator.onLine) return;
 
-      const rawQueue = localStorage.getItem('atril_offline_queue');
+      const rawQueue = localStorage.getItem(OFFLINE_QUEUE_KEY);
       if (!rawQueue) return;
     
       let queue = [];
@@ -721,7 +723,7 @@
       const remainingQueue = [...queue];
 
       while (remainingQueue.length > 0) {
-    const item = remainingQueue[0];
+        const item = remainingQueue[0];
         try {
           // Ejecutamos la llamada a GAS con sus argumentos originales
           await runGas(item.action, ...item.payload);
@@ -729,7 +731,7 @@
       
           // Si tuvo éxito, lo removemos de la cola pendiente
           remainingQueue.shift();
-          localStorage.setItem('atril_offline_queue', JSON.stringify(remainingQueue));
+          localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(remainingQueue));
         } catch (err) {
           console.error(`❌ Error al sincronizar la acción '${item.action}':`, err);
           // Si falla por red, detenemos el proceso para reintentar luego
@@ -738,13 +740,20 @@
       }
     }
 
-    // Escucha automática de reconexión
+    // Escucha automática de reconexión por red
     window.addEventListener('online', () => {
       console.log("🌐 Internet recuperado. Iniciando sincronización de cola...");
       procesarColaOffline();
     });
 
-        function safeGetLocal(key, def = null) {
+    // 📱 REFUERZO MÓVIL: Sincroniza también al volver a enfocar la app en el celular
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        procesarColaOffline();
+      }
+    });
+
+    function safeGetLocal(key, def = null) {
       try { return localStorage.getItem(key) || def; } catch (e) { return def; }
     }
     
@@ -752,26 +761,26 @@
       try { localStorage.setItem(key, val); } catch (e) {}
     }
 
-   // 1. Encolado robusto que garantiza que el cambio no se pierda
-   function encolarCambioLocal(action, argsArray) {
-     try {
-       // Leemos la cola actual de localStorage
-       const queue = JSON.parse(localStorage.getItem('atril_offline_queue') || '[]');
+    // 1. Encolado robusto que garantiza que el cambio no se pierda
+    function encolarCambioLocal(action, argsArray) {
+      try {
+        // Leemos la cola actual de localStorage
+        const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]');
     
-      // Añadimos la acción pendiente con sus argumentos
-       queue.push({ 
-         action: action, 
-         payload: argsArray, 
-         timestamp: Date.now() 
-       });
+        // Añadimos la acción pendiente con sus argumentos
+        queue.push({ 
+          action: action, 
+          payload: argsArray, 
+          timestamp: Date.now() 
+        });
     
-       // Guardamos obligatoriamente en la clave correcta
-       localStorage.setItem('atril_offline_queue', JSON.stringify(queue));
-       console.log("💾 ¡Guardado exitoso en la cola offline (atril_offline_queue)!", action);
-     } catch (e) {
-       console.error("Error al encolar el cambio local:", e);
-     }
-   }
+        // Guardamos obligatoriamente en la clave correcta
+        localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+        console.log("💾 ¡Guardado exitoso en la cola offline (atril_offline_queue)!", action);
+      } catch (e) {
+        console.error("Error al encolar el cambio local:", e);
+      }
+    }
 
     const runGas = async (method, ...args) => {
       // Si está corriendo dentro del entorno nativo de Apps Script
@@ -847,8 +856,8 @@
 
       let preparedHtml = html
         .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<div[^>]*>/gi, '\n')     // Vuelve a poner el salto al abrir el div para separar bien las líneas
-        .replace(/<\/div>/gi, '')         
+        .replace(/<div[^>]*>/gi, '\n')    // Vuelve a poner el salto al abrir el div para separar bien las líneas
+        .replace(/<\/div>/gi, '')        
         .replace(/<p[^>]*>/gi, '\n')      // Vuelve a poner el salto al abrir el p
         .replace(/<\/p>/gi, '');
       const tempDiv = document.createElement('div');
@@ -917,10 +926,42 @@
         .replace(/^\n+/, '') // Esto borra cualquier espacio fantasma al inicio
         .replace(/\n+$/, '');
     }
+    // ==========================================
+      // 💡 BLOQUE PARA EVITAR QUE SE APAGUE LA PANTALLA
+      // ==========================================
+      let wakeLock = null;
 
-    const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
-    const app = createApp({
-      setup() {
+      async function solicitarWakeLock() {
+        if ('wakeLock' in navigator) {
+          try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log("💡 Screen Wake Lock activo: La pantalla no se apagará.");
+
+            wakeLock.addEventListener('release', () => {
+          wakeLock = null;
+            });
+          } catch (err) {
+            console.error(`❌ Error al activar Wake Lock:`, err);
+          }
+        }
+      }
+
+      // Si minimizas la app y vuelves a entrar, lo reactiva solo
+      document.addEventListener('visibilitychange', async () => {
+       if (wakeLock !== null && document.visibilityState === 'visible') {
+          await solicitarWakeLock();
+        }
+      });
+
+      const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
+      const app = createApp({
+        setup() {
+      
+          // 🚀 Activamos el bloqueo de pantalla en cuanto la app encienda y cargue
+          onMounted(() => {
+            solicitarWakeLock();
+          });
+
         // ==========================================
         // FUNCIONES AUXILIARES DE ALMACENAMIENTO
         // (Deben ir primero para que las reconozcan los refs)
@@ -2692,58 +2733,7 @@
           }, 3000);
         }
 
-        // ==========================================
-        // SISTEMA DE COLA OFFLINE (NUEVO)
-        // ==========================================
-        const QUEUE_KEY = 'atril_pending_actions_queue';
-
-        async function ejecutarOEncolar(actionName, payload) {
-          if (!navigator.onLine) {
-            let queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
-            queue.push({ action: actionName, payload, timestamp: Date.now() });
-            safeSetLocal(QUEUE_KEY, JSON.stringify(queue));
-            console.log(`[Modo Offline] Acción '${actionName}' guardada localmente.`);
-            return { success: true, offline: true };
-          }
-
-          try {
-            const resultado = await runGas(actionName, payload);
-            procesarColaPendiente();
-            return resultado;
-          } catch (error) {
-            console.error(`[Error de red] Falló el envío de '${actionName}'. Guardando en cola local:`, error);
-            let queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
-            safeSetLocal(QUEUE_KEY, JSON.stringify(queue));
-            return { success: true, offline: true };
-          }
-        }
-
-        async function procesarColaPendiente() {
-          if (!navigator.onLine) return;
-  
-          let queue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
-          if (queue.length === 0) return;
-
-          console.log(`Sincronizando ${queue.length} acciones pendientes con la nube...`);
-
-          while (queue.length > 0) {
-            const item = queue[0];
-            try {
-              await runGas(item.action, item.payload);
-              queue.shift();
-              safeSetLocal(QUEUE_KEY, JSON.stringify(queue));
-            } catch (error) {
-              console.error("No se pudo sincronizar un elemento pendiente, se reintentará después:", error);
-              break; 
-            }
-          }
-        }
-
-        // Escucha automática cuando regresa el internet
-        window.addEventListener('online', () => {
-          console.log("¡Conexión a internet recuperada!");
-          procesarColaPendiente();
-        });
+        
         return {
           // Autenticación por PIN y Usuario
           isLoggedIn, userRole, pinIngresado, usuarios, currentUserName, isCheckingPass, loginError, loginPin, logout, musicianViewMode, isAdminActive,
