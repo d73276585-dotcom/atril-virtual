@@ -738,6 +738,15 @@
           break;
         }
       }
+
+      // 🔄 NUEVO: Una vez que la cola se vació por completo y subió todo a la nube,
+      // ordenamos recargar los datos para que la pantalla muestre los cambios actualizados.
+      if (remainingQueue.length === 0) {
+        console.log("✨ Sincronización completa. Refrescando datos locales...");
+        if (typeof recargarDatos === 'function') {
+          await recargarDatos();
+        }
+      }
     }
 
     // Escucha automática de reconexión por red
