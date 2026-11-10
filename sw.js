@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atril-cache-v52'; // Incrementado para forzar actualización
+const CACHE_NAME = 'atril-cache-v53'; // Incrementado para forzar actualización
 
 const PRECACHE_ASSETS = [
   './',
