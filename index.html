@@ -739,7 +739,7 @@
         }
       }
 
-      // 🔄 NUEVO: Una vez que la cola se vació por completo y subió todo a la nube,
+      // 🔄 Una vez que la cola se vació por completo y subió todo a la nube,
       // ordenamos recargar los datos para que la pantalla muestre los cambios actualizados.
       if (remainingQueue.length === 0) {
         console.log("✨ Sincronización completa. Refrescando datos locales...");
@@ -935,41 +935,43 @@
         .replace(/^\n+/, '') // Esto borra cualquier espacio fantasma al inicio
         .replace(/\n+$/, '');
     }
+
     // ==========================================
-      // 💡 BLOQUE PARA EVITAR QUE SE APAGUE LA PANTALLA
-      // ==========================================
-      let wakeLock = null;
+    // 💡 BLOQUE PARA EVITAR QUE SE APAGUE LA PANTALLA
+    // ==========================================
+    let wakeLock = null;
 
-      async function solicitarWakeLock() {
-        if ('wakeLock' in navigator) {
-          try {
-            wakeLock = await navigator.wakeLock.request('screen');
-            console.log("💡 Screen Wake Lock activo: La pantalla no se apagará.");
+    async function solicitarWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+          console.log("💡 Screen Wake Lock activo: La pantalla no se apagará.");
 
-            wakeLock.addEventListener('release', () => {
-          wakeLock = null;
-            });
-          } catch (err) {
-            console.error(`❌ Error al activar Wake Lock:`, err);
-          }
+          wakeLock.addEventListener('release', () => {
+            wakeLock = null;
+          });
+        } catch (err) {
+          console.error(`❌ Error al activar Wake Lock:`, err);
         }
       }
+    }
 
-      // Si minimizas la app y vuelves a entrar, lo reactiva solo
-      document.addEventListener('visibilitychange', async () => {
-       if (wakeLock !== null && document.visibilityState === 'visible') {
-          await solicitarWakeLock();
-        }
-      });
+    // 🔧 CORREGIDO: Al volver a poner la app visible, solicita el Wake Lock directamente sin la condición limitante
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible') {
+        console.log("📱 App visible de nuevo. Solicitando Wake Lock...");
+        await solicitarWakeLock();
+      }
+    });
 
-      const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
-      const app = createApp({
-        setup() {
-      
-          // 🚀 Activamos el bloqueo de pantalla en cuanto la app encienda y cargue
-          onMounted(() => {
-            solicitarWakeLock();
-          });
+    const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
+    const app = createApp({
+      setup() {
+    
+        // 🚀 Activamos el bloqueo de pantalla en cuanto la app encienda y cargue
+        onMounted(() => {
+          solicitarWakeLock();
+        });
 
         // ==========================================
         // FUNCIONES AUXILIARES DE ALMACENAMIENTO
